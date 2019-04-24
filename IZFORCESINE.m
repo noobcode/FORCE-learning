@@ -147,6 +147,7 @@ function [] = IZFORCESINE(load_weights)
             drawnow
             gg = max(1,i - round(3000/dt));  %only plot for last 3 seconds
 %{
+            % plot approximant and target
             figure(2)
             plot(dt*(gg:1:i)/1000, zx(:,gg:1:i),'k','LineWidth',2), hold on
             plot(dt*(gg:1:i)/1000, current(gg:1:i,:),'b--','LineWidth',2), hold off
@@ -155,6 +156,7 @@ function [] = IZFORCESINE(load_weights)
             legend('Target Signal', 'Approximant')
             xlim([dt*i-3000,dt*i]/1000)
 
+            % plot decoders
             figure(3)
             plot((1:1:i)*dt/1000, RECB(1:1:i,:))
             xlabel('Time (s)')
@@ -169,6 +171,7 @@ function [] = IZFORCESINE(load_weights)
             set(gca, 'YScale', 'log')
             title('Error curve')
 %}
+            % plot population activity
             figure(14)
             plot(tspike(1:ns,2), tspike(1:ns,1),'k.')
             xlabel('Time (ms)')
