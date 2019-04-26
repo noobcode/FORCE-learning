@@ -62,9 +62,9 @@ function [] = IZFORCESINE(load_weights)
      tau_ad = 10/dt; % time constant of activity descriptor
      
      %% oscillations by means of external sinusoidal input current
-     A = 100; % wave amplitude
+     A = 5; % wave amplitude
      f = 10; % oscillation frequency (Hz)
-     omega =  2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     omega =  f*dt;%2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
      phase = 0; % phase
     %%
     % load weights omega, phi and eta or initialize them randomly
@@ -85,7 +85,7 @@ function [] = IZFORCESINE(load_weights)
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 997; %Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    BIAS = 1000;%997; %Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
      Pinv = eye(N)*2; %initial correlation matrix, coefficient is the regularization constant as well 
      step = 20; %optimize with RLS only every 20 steps 
