@@ -60,6 +60,12 @@ function [] = IZFORCESINE(load_weights)
      % activity descriptor of neuron 1
      y_ad = zeros(nt,1);
      tau_ad = 10/dt; % time constant of activity descriptor
+     
+     %% oscillations by means of external sinusoidal input current
+     A = 100; % wave amplitude
+     f = 10; % oscillation frequency (Hz)
+     omega =  2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     phase = 0; % phase
     %%
     % load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
@@ -79,7 +85,7 @@ function [] = IZFORCESINE(load_weights)
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 1000; %Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    BIAS = 997; %Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
      Pinv = eye(N)*2; %initial correlation matrix, coefficient is the regularization constant as well 
      step = 20; %optimize with RLS only every 20 steps 
@@ -102,8 +108,13 @@ function [] = IZFORCESINE(load_weights)
         y_ad(i+1) = y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad;
         
         %% EULER INTEGRATE
+        % uncomment the type of current you want to use
+        % I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
+        % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
+        I = IPSC + E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
+        
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
-        I = IPSC + E*z + BIAS - gamma*y(i+1) + OMEGA*has_spiked;  % postsynaptic current
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
         %%

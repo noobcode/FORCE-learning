@@ -60,6 +60,13 @@ function [] = IZFORCESINE(load_weights)
      % activity descriptor of neuron 1
      y_ad = zeros(nt,1);
      tau_ad = 10/dt; % time constant of activity descriptor
+     
+     %% oscillations by means of external sinusoidal input current
+     A = 0; % amplitude
+     f = 10; % oscillation frequency
+     omega =  2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     omega = omega/dt;
+     phase = 0; % phase
     %%
     % load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
@@ -103,7 +110,10 @@ function [] = IZFORCESINE(load_weights)
         
         %% EULER INTEGRATE
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
-        I = IPSC + E*z + BIAS - gamma*y(i+1); + OMEGA*has_spiked;  % postsynaptic current
+        % I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
+        % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
+        I = IPSC + E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
         %%
