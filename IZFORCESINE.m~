@@ -103,7 +103,7 @@ function [] = IZFORCESINE(load_weights)
         
         %% EULER INTEGRATE
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
-        I = IPSC + E*z + BIAS - gamma*y(i+1) + OMEGA*has_spiked;  % postsynaptic current
+        I = IPSC + E*z + BIAS - gamma*y(i+1); + OMEGA*has_spiked;  % postsynaptic current
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
         %%
