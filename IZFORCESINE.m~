@@ -59,7 +59,7 @@ function [] = IZFORCESINE(load_weights)
      
      % activity descriptor of neuron 1
      y_ad = zeros(nt,1);
-     tau_ad = 10/dt; % time constant of activity descriptor
+     tau_ad = 100/dt; % time constant of activity descriptor
     %%
     % load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
@@ -99,11 +99,11 @@ function [] = IZFORCESINE(load_weights)
         % measure general network activity
         y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau;
         % activity descriptor of neuron 1
-        y_ad(i+1) = y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad;
+        y_ad(i+1) = y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_
         
         %% EULER INTEGRATE
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
-        I = IPSC + E*z + BIAS - gamma*y(i+1); + OMEGA*has_spiked;  % postsynaptic current
+        I = IPSC + E*z + BIAS - gamma*y(i+1); + 0.1 * OMEGA*has_spiked;  % postsynaptic current
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
         %%
@@ -199,13 +199,6 @@ function [] = IZFORCESINE(load_weights)
             xlabel('Time (s)')
             ylabel('$y(t)$','Interpreter','LaTeX')
             title('General Network Activity')
-            
-            % plot activity descriptor of neuron 1
-            figure(6)
-            plot(dt*(1:1:i)/1000, y_ad(1:1:i), 'LineWidth', 2)
-            xlabel('Time (s)')
-            ylabel('$y_{ad}(t)$','Interpreter','LaTeX')
-            title('Activity Descriptor of neuron 1')
         end   
     end
     % end simulation
