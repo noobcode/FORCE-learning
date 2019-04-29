@@ -62,9 +62,10 @@ function [] = IZFORCESINE(load_weights)
      tau_ad = 10/dt; % time constant of activity descriptor
      
      %% oscillations by means of external sinusoidal input current
-     A = 5; % wave amplitude
-     f = 10; % oscillation frequency (Hz)
-     omega =  f*dt;%2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     A = 50; % wave amplitude
+     f = 4; % oscillation frequency (Hz)
+     omega =  2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     omega = omega * (dt/1000);
      phase = 0; % phase
     %%
     % load weights omega, phi and eta or initialize them randomly
