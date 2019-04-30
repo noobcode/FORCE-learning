@@ -8,13 +8,14 @@ function [] = IZFORCESINE(load_weights)
         load_weights = 0;
     end
 
-    T = 5000; %15000; %Total time in ms
+    T = 15000; %15000; %Total time in ms
     dt = 0.04; %Integration time step in ms 
     nt = round(T/dt); %Time steps
     N =  2000;  %Number of neurons
     
     losses = zeros(nt, 1);
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT. 
+    %zx = (sin(2*5*pi*(1:1:nt)*dt/1000)); original target
     zx = (sin(2*5*pi*(1:1:nt)*dt/1000));
     
     k = min(size(zx)); %used to get the dimensionality of the approximant correctly.  Typically will be 1 unless you specify a k-dimensional target function.  
@@ -48,11 +49,11 @@ function [] = IZFORCESINE(load_weights)
     rng(1)
      %% General Network Activity and Global Inhibition Term parameters 
      y = zeros(nt,1); % general network activity measure
-     gamma = 0%100 % coefficient of y
-     tau = 100/dt % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
-     g = 1.6 %1.6 % network gain
+     gamma = 0; %100 % coefficient of y
+     tau = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
+     g = 1.6; %1.6 % network gain
      sigma = g / sqrt(p * N); % std. deviation of static weight matrix
-     
+
      %% Synaptic fatigue / Short-term Depression
      has_spiked = zeros(N,1); % binary vector that tells if a neuron has spiked
      index = []; % indeces of neurons that spiked at the current iteration
@@ -62,9 +63,9 @@ function [] = IZFORCESINE(load_weights)
      tau_ad = 10/dt; % time constant of activity descriptor
      
      %% oscillations by means of external sinusoidal input current
-     A = 50; % wave amplitude
-     f = 4; % oscillation frequency (Hz)
-     omega =  2*pi*f; % angular frequency, the rate of change of the function argument (radians per second)
+     A = 25; % wave amplitude
+     f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
+     omega =  2*pi*f; % angular frequency (radians per second)
      omega = omega * (dt/1000);
      phase = 0; % phase
     %%
@@ -86,7 +87,7 @@ function [] = IZFORCESINE(load_weights)
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 1000;%997; %Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    BIAS = 1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
      Pinv = eye(N)*2; %initial correlation matrix, coefficient is the regularization constant as well 
      step = 20; %optimize with RLS only every 20 steps 
@@ -110,7 +111,7 @@ function [] = IZFORCESINE(load_weights)
         
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
-        % I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
         I = IPSC + E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
@@ -150,12 +151,10 @@ function [] = IZFORCESINE(load_weights)
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
         if mod(i,step)==1 
-            if i > imin 
-                if i < icrit 
-                   cd = Pinv * r;
-                   BPhi = BPhi - (cd * err');
-                   Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
-                end 
+            if i > imin && i < icrit
+                cd = Pinv * r;
+                BPhi = BPhi - (cd * err');
+                Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
             end 
          end
         %% End iteration...store and reset.
@@ -172,15 +171,15 @@ function [] = IZFORCESINE(load_weights)
         if mod(i,round(100/dt))==1 
             drawnow
             gg = max(1,i - round(3000/dt));  %only plot for last 3 seconds
-%{
+
             % plot approximant and target
             figure(2)
-            plot(dt*(gg:1:i)/1000, zx(:,gg:1:i),'k','LineWidth',2), hold on
-            plot(dt*(gg:1:i)/1000, current(gg:1:i,:),'b--','LineWidth',2), hold off
+            plot(dt*(1:1:i)/1000, zx(:,1:1:i),'k','LineWidth',2), hold on
+            plot(dt*(1:1:i)/1000, current(1:1:i,:),'b--','LineWidth',2), hold off
             xlabel('Time (s)')
             ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
             legend('Target Signal', 'Approximant')
-            xlim([dt*i-3000,dt*i]/1000)
+            %xlim([dt*i-3000,dt*i]/1000)
 
             % plot decoders
             figure(3)
@@ -196,7 +195,7 @@ function [] = IZFORCESINE(load_weights)
             ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
             set(gca, 'YScale', 'log')
             title('Error curve')
-%}
+
             % plot population activity
             figure(14)
             plot(tspike(1:ns,2), tspike(1:ns,1),'k.')
@@ -231,11 +230,14 @@ function [] = IZFORCESINE(load_weights)
     M = tspike(tspike(:,2)>dt*icrit); 
     AverageFiringRate = 1000*length(M)/(N*(T-dt*icrit)) 
 
+    % Average Error after training
+    errors_after_training = losses(icrit*dt:end); % losses at each dt after RLS is turned off
+    AverageError = mean(errors_after_training)
     %% Plotting neurons before and after learning
     % "normalize" membrane potential,
     % add 'j' to the membrane potential of neuron j so that the curves do not
     % overlap
-%{
+
     % post learning
     figure(30)
     for j = 1:1:5
@@ -267,6 +269,6 @@ function [] = IZFORCESINE(load_weights)
     xlabel('Re \lambda')
     ylabel('Im \lambda')
     title('Eigenvalues')
-%}
+
 end
 
