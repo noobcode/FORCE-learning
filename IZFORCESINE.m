@@ -67,7 +67,16 @@ function [] = IZFORCESINE(load_weights)
      f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
      omega =  2*pi*f; % angular frequency (radians per second)
      omega = omega * (dt/1000);
-     phase = 0; % phase
+     phase = 0; % phase -- e.g. 1/2*pi
+     
+     %% Gating variables (1 open, 0 closed)
+     feedback_gate = 0; % gate for the feedback current {0,1}, how about [0,1]?
+     train_gate = 0; % gate for training the weights
+     
+     iteration_per_second = round(1000/dt); % number of loop iterations per second
+     iteration_per_cycle = round(iteration_per_second / f); % number of iterations to make a wave cycle (2pi)
+     phase_training = round(0 * iteration_per_cycle); % at what percentage of the cycle to start training - [0,1]
+     
     %%
     % load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
@@ -114,7 +123,7 @@ function [] = IZFORCESINE(load_weights)
         %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
-        I = IPSC + E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
+        I = IPSC + feedback_gate * E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
         
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
@@ -150,8 +159,8 @@ function [] = IZFORCESINE(load_weights)
         err = z - zx(:,i); % error 
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
-        if mod(i,step)==1 
-            if i > imin && i < icrit
+        if i > imin && i < icrit
+            if (~train_gate) * mod(i-imin, iteration_per_cycle) == 1 + phase_training || train_gate * mod(i,step)==1 
                 cd = Pinv * r;
                 BPhi = BPhi - (cd * err');
                 Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
@@ -161,7 +170,7 @@ function [] = IZFORCESINE(load_weights)
         % if spike occurred, reset variables
         u = u + d*(v>=vpeak);  %implements set u to u+d if v>vpeak, component by component. 
         v = v + (vreset-v).*(v>=vpeak); %implements v = c if v>vpeak add 0 if false, add c-v if true, v+c-v = c
-        v_ = v;  % sets v(t-1) = v for the next itteration of loop
+        v_ = v;  % sets v(t-1) = v for the next iteration of loop
         
         REC(i,:) = [v(1:5)',u(1:5)'];  
         current(i,:) = z';
