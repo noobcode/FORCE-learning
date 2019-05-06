@@ -13,6 +13,7 @@ function [] = IZFORCESINE(load_weights)
     nt = round(T/dt); %Time steps
     N =  2000;  %Number of neurons
     
+    losses = zeros(nt, 1);
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
     target_frequency = 7;
     target_phase = 0; % random phase
@@ -117,8 +118,6 @@ function [] = IZFORCESINE(load_weights)
     fprintf("training starts at %d s\n", imin * dt/1000);
     fprintf("training ends at %d s\n", icrit * dt/1000);
     fprintf("simulation ends at %d s\n", nt*dt/1000);
-    
-    losses = zeros(nt, 1);
     %% SIMULATION
     tic
     ilast = i ;
