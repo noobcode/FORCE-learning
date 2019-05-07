@@ -1,28 +1,50 @@
-function [] = IZFORCESINE(load_weights)
+function [] = IZFORCESINE()
     %% Force Method with Izhikevich Network 
     clear all
     close all
-    clc 
+    clc
     
-    if nargin < 1
-        load_weights = 0;
-    end
-
-    T = 15000; %15000; %Total time in ms
-    dt = 0.04; %Integration time step in ms 
-    nt = round(T/dt); %Time steps
-    N =  2000;  %Number of neurons
+    %% frequency and phase of target signal
+    target_frequency = 5;
+    target_phase = 0;
+    fprintf("target frequency: %.2f\n", target_frequency);
+    fprintf("target phase: %f\n", target_phase);
+    
+    %%
+    load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
+    training_is_time_based = 0; % 0: cycle-based training / 1 : time-based training / 
+    
+    %% simulation timings (start/end training, total time)
+    dt = 0.04; % Integration time step in ms 
+    iteration_per_second = round(1000/dt); % number of loop iterations per second
+    iteration_per_target_cycle = round(iteration_per_second / target_frequency);
+    
+    imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
+    
+    if training_is_time_based
+        icrit = round(10000/dt); % end training at this time step
+        T = 15000; % Total time in ms
+        nt = round(T/dt); % Time steps
+    else
+        % trainining based on number of target cycles (train for 20 cycles)
+        icrit = imin + 20 * iteration_per_target_cycle;
+        nt = icrit + imin; % max between 15s and icrit+5s
+    end 
+    
+    fprintf("training starts at %d s\n", imin * dt/1000);
+    fprintf("training ends at %d s\n", icrit * dt/1000);
+    fprintf("simulation ends at %d s\n", nt * dt/1000);
     
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
-    target_frequency = 7;
-    target_phase = 0; % random phase
-    zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     %zx = (sin(2*5*pi*(1:1:nt)*dt/1000)); original target
+    zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     
-    k = min(size(zx)); %used to get the dimensionality of the approximant correctly.  Typically will be 1 unless you specify a k-dimensional target function.  
-    
-    fprintf("target frequency: %.2f\ntarget phase: %f\n", target_frequency, target_phase);
+    k = min(size(zx)); % get approximant dimensionality. 
+                       % typically 1 unless a k-dimensional target function.
+                       
+    losses = zeros(nt, 1);
     %% Izhikevich Parameters
+    N =  2000;  % Number of neurons
     a = 0.01; %adaptation reciprocal time constant
     b = -2;  %resonance parameter 
     vreset = -65; % reset voltage 
@@ -73,14 +95,13 @@ function [] = IZFORCESINE(load_weights)
      phase = 0; % phase -- e.g. 1/2*pi
      
      %% Gating variables (1 open, 0 closed)
-     feedback_gate = 1; % gate for the feedback current {0,1}, how about [0,1]? for now keep it at 1
-     train_gate = 1; % gate for training the weights
-     
-     iteration_per_second = round(1000/dt); % number of loop iterations per second
+     feedback_gate = 1; % gate for the feedback current {0,1}. for now keep it at 1
+     train_gate = 1; % gate for training the weights. 1: continuous training
+                                                    % 0: phase training
      iteration_per_cycle = round(iteration_per_second / f); % number of iterations to make a wave cycle (2pi)
      phase_training = round(0 * iteration_per_cycle); % at what percentage of the cycle to start training - [0,1]
-    %%
-    % load weights omega, phi and eta or initialize them randomly
+    
+     %% load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
         fprintf('loading old weights...\n');
         weights_file = load('weights.mat');
@@ -93,32 +114,20 @@ function [] = IZFORCESINE(load_weights)
         BPhi = zeros(N,k); %initial decoder.  Best to keep it at 0.
         E = (2*rand(N,k)-1)*Q;  %Weight matrix is OMEGA0 + E*BPhi';
     end
-    
+    %%
     z = zeros(k,1);  %initial approximant
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
     BIAS = 1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
-    Pinv = eye(N)*2; %initial correlation matrix, coefficient is the regularization constant as well 
-    step = 20; %optimize with RLS only every 20 steps  
+    Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
+    step = 20; % optimize with RLS only every 20 steps  
     current = zeros(nt,k);  %store the approximant 
     RECB = zeros(nt,5); %store the decoders 
     REC = zeros(nt,10); %Store voltage and adaptation variables for plotting 
     i=1;
     
-    %%
-    iteration_per_target_cycle = round(iteration_per_second / target_frequency);
-    
-    imin = round(5000/dt); %time before starting RLS, gets the network to chaotic attractor 
-    icrit = imin + 20 * iteration_per_target_cycle; %round(10000/dt); %end simulation at this time step
-    nt = icrit + imin; % max between 15s and icrit+5s
-    
-    fprintf("training starts at %d s\n", imin * dt/1000);
-    fprintf("training ends at %d s\n", icrit * dt/1000);
-    fprintf("simulation ends at %d s\n", nt*dt/1000);
-    
-    losses = zeros(nt, 1);
     %% SIMULATION
     tic
     ilast = i ;
@@ -203,7 +212,6 @@ function [] = IZFORCESINE(load_weights)
             ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
             legend('Training interval', 'Target Signal', 'Approximant')
             hold off
-            %xlim([dt*i-3000,dt*i]/1000)
             
             % plot squared error
             figure(5)
@@ -248,12 +256,12 @@ function [] = IZFORCESINE(load_weights)
     %% saving weights
     save('weights.mat', 'OMEGA', 'BPhi', 'E');
 
-    %% Average Firing Rate after training
+    %% Average Firing Rate  and Average Error after training
     % only consider the spikes from the moment RLS is turned off till the end of the simulation.
     % multiply by 1000 to convert milliseconds to seconds.
-    tspike = tspike(tspike(:,2)~=0,:); 
-    M = tspike(tspike(:,2)>dt*icrit); 
-    AverageFiringRate = 1000*length(M)/(N*(T-dt*icrit));
+    tspike = tspike(tspike(:,2) ~= 0,:); 
+    M = tspike(tspike(:,2) > dt*icrit); 
+    AverageFiringRate = 1000*length(M)/(N*(nt-icrit)*dt);
 
     % Average Error after training
     errors_after_training = losses(icrit:end); % losses at each dt after RLS is turned off
@@ -271,7 +279,7 @@ function [] = IZFORCESINE(load_weights)
     for j = 1:1:5
         plot((1:1:i)*dt/1000, REC(1:1:i,j)/(vpeak-vreset)+j), hold on 
     end
-    xlim([T/1000-2,T/1000]) %  from 13 seconds to 15 seconds
+    xlim([icrit,nt]*dt/1000) % last 5 seconds
     xlabel('Time (s)')
     ylabel('Neuron Index') 
     title('Post Learning')
