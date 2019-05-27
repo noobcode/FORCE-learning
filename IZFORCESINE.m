@@ -1,12 +1,12 @@
-function [] = IZFORCESINE()
+function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     %% Force Method with Izhikevich Network 
-    clear all
+    clearvars -except seed
     close all
     clc
     
     %% frequency and phase of target signal
-    target_frequency = 5;
-    target_phase = 0;
+    target_frequency = 0.5;
+    target_phase = 0.5 * pi;
     fprintf("target frequency: %.2f\n", target_frequency);
     fprintf("target phase: %f\n", target_phase);
     
@@ -23,12 +23,12 @@ function [] = IZFORCESINE()
     
     if training_is_time_based
         icrit = round(10000/dt); % end training at this time step
-        T = 15000; % Total time in ms
+        T = 15000; % Total time in ms % TODO: set to 5000 if you only want to see pre-learning activity
         nt = round(T/dt); % Time steps
     else
-        % trainining based on number of target cycles (train for 20 cycles)
-        icrit = imin + 20 * iteration_per_target_cycle;
-        nt = icrit + imin; % max between 15s and icrit+5s
+        % trainining based on number of target icycles
+        icrit = imin + 20 * iteration_per_target_cycle; % train for 20 cycles
+        nt = icrit + 10 * iteration_per_target_cycle; % evaluate for 10 cycles
     end 
     
     fprintf("training starts at %d s\n", imin * dt/1000);
@@ -36,11 +36,9 @@ function [] = IZFORCESINE()
     fprintf("simulation ends at %d s\n", nt * dt/1000);
     
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
-    %zx = (sin(2*5*pi*(1:1:nt)*dt/1000)); original target
     zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     
-    k = min(size(zx)); % get approximant dimensionality. 
-                       % typically 1 unless a k-dimensional target function.
+    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
                        
     losses = zeros(nt, 1);
     %% Izhikevich Parameters
@@ -57,12 +55,12 @@ function [] = IZFORCESINE()
     u = zeros(N,1);  %initialize adaptation 
     tr = 2;  %synaptic rise time 
     td = 20; %decay time 
-    p = 0.3; %0.1; %sparsity
+    p = 0.1; %sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
     Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
 
     %Storage variables for synapse integration  
-    IPSC = zeros(N,1); %post synaptic current 
+    IPSC = zeros(N,1); % post synaptic current 
     h = zeros(N,1); 
     r = zeros(N,1);
     hr = zeros(N,1);
@@ -71,36 +69,42 @@ function [] = IZFORCESINE()
     %-----Initialization---------------------------------------------
     v = vr + (vpeak-vr) * rand(N,1); %initial distribution 
     v_ = v; %These are just used for Euler integration, previous time step storage
-    rng(1)
-     %% General Network Activity and Global Inhibition Term parameters 
-     y = zeros(nt,1); % general network activity measure
-     gamma = 0; %100 % coefficient of y
-     tau = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
-     g = 1.6; %1.6 % network gain
-     sigma = g / sqrt(p * N); % std. deviation of static weight matrix
-
-     %% Synaptic fatigue / Short-term Depression
-     has_spiked = zeros(N,1); % binary vector that tells if a neuron has spiked
-     index = []; % indeces of neurons that spiked at the current iteration
-     
-     % activity descriptor of neuron 1
-     y_ad = zeros(nt,1);
-     tau_ad = 10/dt; % time constant of activity descriptor
-     
-     %% oscillations by means of external sinusoidal input current
-     A = 25; % wave amplitude
-     f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
-     omega =  2*pi*f; % angular frequency (radians per second)
-     omega = omega * (dt/1000);
-     phase = 0; % phase -- e.g. 1/2*pi
-     
-     %% Gating variables (1 open, 0 closed)
-     feedback_gate = 1; % gate for the feedback current {0,1}. for now keep it at 1
-     train_gate = 1; % gate for training the weights. 1: continuous training
-                                                    % 0: phase training
-     iteration_per_cycle = round(iteration_per_second / f); % number of iterations to make a wave cycle (2pi)
-     phase_training = round(0 * iteration_per_cycle); % at what percentage of the cycle to start training - [0,1]
+    rng(seed) % default seed was 1
     
+    %% General Network Activity and Global Inhibition Term parameters 
+    y = zeros(nt,1); % general network activity measure
+    gamma = 0; %100 % coefficient of y
+    tau = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
+    %g = 1.6; % network gain
+    g = 1 / sqrt(p);
+    sigma = g / sqrt(p * N); % std. deviation of static weight matrix  
+    
+    %% Synaptic fatigue / Short-term Depression
+    has_spiked = zeros(N,1); % binary vector that tells if a neuron has spiked
+    index = []; % indeces of neurons that spiked at the current iteration
+     
+    % activity descriptor of neuron 1
+    y_ad = zeros(nt,1);
+    tau_ad = 10/dt; % time constant of activity descriptor
+    
+    %% oscillations by means of external sinusoidal input current
+    A = 200; %500; %25; % wave amplitude
+    f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
+    omega =  2*pi*f; % angular frequency (radians per second)
+    omega = omega * (dt/1000);
+    phase = 0; % phase -- e.g. 1/2*pi
+    
+    ext_sinusoid =  A * sin(omega * (1:1:nt) + phase); % external sinuoid
+    
+    %% Gating variables (1 open, 0 closed)
+    feedback_gate = 1; % gate for the feedback current {0,1}. for now keep it at 1
+    train_gate = 1; % gate for training the weights. 0: phase training
+                                                   % 1: continuous training
+    phase_percentage = 0; % 0 : 0 / 0.25 : 1/2 pi / 0.5 : pi ...
+    phase_training = round(phase_percentage * iteration_per_target_cycle); % at what percentage of the cycle to start training - [0,1]
+    
+    fprintf("train gate (0 phase, 1 time): %d\n", train_gate);
+    fprintf("train at phase percentage %.2f\n", phase_percentage);
      %% load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
         fprintf('loading old weights...\n');
@@ -133,7 +137,7 @@ function [] = IZFORCESINE()
     ilast = i ;
     %icrit = ilast; %uncomment this, and restart cell if you want to test
     % performance before icrit.  
-    for i = ilast:1:nt
+    for i = ilast:1:nt    
         % measure general network activity
         y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau;
         % activity descriptor of neuron 1
@@ -141,10 +145,10 @@ function [] = IZFORCESINE()
         
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
-        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
-        I = IPSC + feedback_gate * E*z + BIAS + A * sin(omega * i + phase); % PSC + External Sinusoidal Input
+        %I = IPSC + feedback_gate*E*z + BIAS + ext_sinusoid(i); % PSC + External Sinusoidal Input
         
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
@@ -181,7 +185,7 @@ function [] = IZFORCESINE()
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
         if i > imin && i < icrit
-            if (~train_gate) * mod(i-imin, iteration_per_cycle) == 1 + phase_training || train_gate * mod(i,step)==1 
+            if (~train_gate) * mod(i-imin, iteration_per_target_cycle) == 1 + phase_training || train_gate * mod(i,step)==1
                 cd = Pinv * r;
                 BPhi = BPhi - (cd * err');
                 Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
@@ -197,66 +201,17 @@ function [] = IZFORCESINE()
         current(i,:) = z';
         RECB(i,:) = BPhi(1:5);
         losses(i) = err^2;
-        %% plot
-        if mod(i,round(100/dt))==1 
-            drawnow
-            gg = max(1,i - round(3000/dt));  %only plot for last 3 seconds
-
-            % plot approximant and target
-            figure(2)
-            patch([imin icrit icrit imin]*dt/1000, [min(ylim) min(ylim) max(ylim) max(ylim)], [0.86,0.86,0.86], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
-            hold on
-            plot(dt*(1:1:i)/1000, zx(:,1:1:i),'k','LineWidth',2)
-            plot(dt*(1:1:i)/1000, current(1:1:i,:),'b--','LineWidth',2)
-            xlabel('Time (s)')
-            ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
-            legend('Training interval', 'Target Signal', 'Approximant')
-            hold off
-            
-            % plot squared error
-            figure(5)
-            plot((1:1:i)*dt/1000, losses(1:1:i,:), 'LineWidth',2)
-            xlabel('Time (s)')
-            ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
-            set(gca, 'YScale', 'log')
-            title('Error curve')
-
-            % plot population activity
-            figure(14)
-            plot(tspike(1:ns,2), tspike(1:ns,1),'k.')
-            xlabel('Time (ms)')
-            ylabel('Neuron Index')
-            title('Raster plot')
-            ylim([0,100])
-            
-            % plot general network activity
-            figure(4)
-            plot(dt*(1:1:i)/1000, y(1:1:i), 'LineWidth', 2)
-            xlabel('Time (s)')
-            ylabel('$y(t)$','Interpreter','LaTeX')
-            title('General Network Activity')
-%{            
-            % plot activity descriptor of neuron 1
-            figure(6)
-            plot(dt*(1:1:i)/1000, y_ad(1:1:i), 'LineWidth', 2)
-            xlabel('Time (s)')
-            ylabel('$y_{ad}(t)$','Interpreter','LaTeX')
-            title('Activity Descriptor of neuron 1')
-            
-            % plot decoders
-            figure(3)
-            plot((1:1:i)*dt/1000, RECB(1:1:i,:))
-            xlabel('Time (s)')
-            ylabel('Decoders $\phi(t)$', 'Interpreter', 'LaTeX')
-            title('Decoders')
-%}
-        end   
+        
+        %% print elapsed time
+        if mod(i,round(1000/dt))==0
+            fprintf("%d seconds out of %d\n", i*dt/1000, nt*dt/1000);
+        end
     end
     % end simulation
     %% saving weights
     save('weights.mat', 'OMEGA', 'BPhi', 'E');
 
-    %% Average Firing Rate  and Average Error after training
+    %% Average Firing Rate and Average Error after training
     % only consider the spikes from the moment RLS is turned off till the end of the simulation.
     % multiply by 1000 to convert milliseconds to seconds.
     tspike = tspike(tspike(:,2) ~= 0,:); 
@@ -273,13 +228,13 @@ function [] = IZFORCESINE()
     % "normalize" membrane potential,
     % add 'j' to the membrane potential of neuron j so that the curves do not
     % overlap
-
+%{
     % post learning
     figure(30)
     for j = 1:1:5
         plot((1:1:i)*dt/1000, REC(1:1:i,j)/(vpeak-vreset)+j), hold on 
     end
-    xlim([icrit,nt]*dt/1000) % last 5 seconds
+    xlim([nt-imin,nt]*dt/1000) % last 5 seconds
     xlabel('Time (s)')
     ylabel('Neuron Index') 
     title('Post Learning')
@@ -305,6 +260,70 @@ function [] = IZFORCESINE()
     xlabel('Re \lambda')
     ylabel('Im \lambda')
     title('Eigenvalues')
+    %%
+%}
+if seed == 10
+    % plot approximant and target
+    figure(2)
+    min_ = min(min(zx),min(current));
+    max_ = max(max(zx),max(current));
+    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
+    hold on
+    plot(dt*(1:1:nt)/1000, zx,'k','LineWidth',2)
+    plot(dt*(1:1:nt)/1000, current,'b--','LineWidth',2)
+    xlabel('Time (s)')
+    ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
+    legend('Training interval', 'Target Signal', 'Approximant','Location', 'best')
+    hold off
+            
+    % plot squared error
+    figure(5)
+    min_ = min(losses);
+    max_ = max(losses);
+    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
+    hold on
+    plot((1:1:nt)*dt/1000, losses, 'LineWidth',2)
+    hold off
+    legend('Training interval', 'Error','Location', 'best')
+    xlabel('Time (s)')
+    ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
+    set(gca, 'YScale', 'log')
+    title('Error curve')
 
+    % plot population activity
+    figure(14)
+    min_ = 0;
+    max_ = 100;
+    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
+    hold on
+    plot(tspike(1:ns,2)/1000, tspike(1:ns,1),'k.')
+    xlabel('Time (s)')
+    ylabel('Neuron Index')
+    title('Raster plot')
+    ylim([0,100])
+end  
+%{
+    % plot general network activity
+    figure(4)
+    plot(dt*(1:1:nt)/1000, y(2:end), 'LineWidth', 2)
+    xlabel('Time (s)')
+    ylabel('$y(t)$','Interpreter','LaTeX')
+    title('General Network Activity')
+%}
+%{            
+    % plot activity descriptor of neuron 1
+    figure(6)
+    plot(dt*(1:1:nt)/1000, y_ad), 'LineWidth', 2)
+    xlabel('Time (s)')
+    ylabel('$y_{ad}(t)$','Interpreter','LaTeX')
+    title('Activity Descriptor of neuron 1')
+           
+    % plot decoders
+    figure(3)
+    plot((1:1:nt)*dt/1000, RECB)
+    xlabel('Time (s)')
+    ylabel('Decoders $\phi(t)$', 'Interpreter', 'LaTeX')
+    title('Decoders')
+%}
 end
 
