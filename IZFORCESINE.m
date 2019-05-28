@@ -5,15 +5,17 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     clc
     
     %% frequency and phase of target signal
-    target_frequency = 12;
+    target_frequency = 5;
     target_phase = 0;
     fprintf("target frequency: %.2f\n", target_frequency);
     fprintf("target phase: %f\n", target_phase);
     
     %%
     load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
-    training_is_time_based = 1; % 0: cycle-based training / 1 : time-based training / 
-    
+    training_setting = 2; % 0: time-based training
+                          % 1: cycle-based training
+                          % 2: max(5 seconds, 20 cycles) training 
+    fprintf("training setting %d\n", training_setting);
     %% simulation timings (start/end training, total time)
     dt = 0.04; % Integration time step in ms 
     iteration_per_second = round(1000/dt); % number of loop iterations per second
@@ -21,14 +23,25 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     
     imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
     
-    if training_is_time_based
+    if training_setting == 0
+        % 5 sec stabilization, 5 sec training, 5 sec post-training
         icrit = round(10000/dt); % end training at this time step
         T = 15000; % Total time in ms % TODO: set to 5000 if you only want to see pre-learning activity
         nt = round(T/dt); % Time steps
-    else
-        % trainining based on number of target icycles
+    elseif training_setting == 1
+        % 5 sec stabilization, 20 target cycles training, 10 target cycles
+        % post-training
         icrit = imin + 20 * iteration_per_target_cycle; % train for 20 cycles
         nt = icrit + 10 * iteration_per_target_cycle; % evaluate for 10 cycles
+    elseif training_setting == 2
+        % 5 sec stabilization, max(5 sec, 20 cycles) training, 10+10 sec
+        % training
+        icrit = imin + max(imin, 20 * iteration_per_target_cycle);
+        icrit_2 = icrit + 10 * iteration_per_target_cycle; % time when target signal is removed from input I
+        nt = icrit + 20 * iteration_per_target_cycle;
+        A_ = 10; % amplitude of reinjected target signal
+        p_ = 0.2; % percentage of neurons that get the additional current
+        past = round(0 /dt); % how much to look in the past for the value of the target signal
     end 
     
     fprintf("training starts at %d s\n", imin * dt/1000);
@@ -40,14 +53,15 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
     zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     
-    n_slices = 10;
+    n_slices = 0;
     if n_slices > 0
         [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
         md_zx = full(ind2vec(md_zx)); % one-hot encoding
         zx = md_zx;
     end
     
-    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.              
+    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
+    fprintf("target dimension: %d\n", k);
     %% Izhikevich Parameters
     N =  2000;  % Number of neurons
     a = 0.01; %adaptation reciprocal time constant
@@ -153,11 +167,12 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
         
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
-        I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
-        %I = IPSC + feedback_gate*E*z + BIAS + ext_sinusoid(i); % PSC + External Sinusoidal Input
-        
+        % I = IPSC + feedback_gate*E*z + BIAS + ext_sinusoid(i); % PSC + External Sinusoidal Input
+        I = IPSC + E*z + BIAS + A_ * zx(:,i-past) * (rand(N,1) < p_) * (i > imin & i < icrit_2);
+
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
