@@ -1,4 +1,4 @@
-function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
+function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2] = IZFORCESINE(seed)
     %% Force Method with Izhikevich Network 
     clearvars -except seed
     close all
@@ -37,11 +37,13 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
         % 5 sec stabilization, max(5 sec, 20 cycles) training, 10+10 sec
         % training
         icrit = imin + max(imin, 20 * iteration_per_target_cycle);
-        icrit_2 = icrit + 10 * iteration_per_target_cycle; % time when target signal is removed from input I
-        nt = icrit + 20 * iteration_per_target_cycle;
-        A_ = 10; % amplitude of reinjected target signal
+        icrit_2 = icrit + round(10000/dt); % time when target signal is removed from input I
+        nt = icrit_2 + round(10000/dt);
+        A_ = 50; % amplitude of reinjected target signal
         p_ = 0.2; % percentage of neurons that get the additional current
-        past = round(0 /dt); % how much to look in the past for the value of the target signal
+        past_ms = 0; % how much to look in the past for the value of the target signal [0-500]ms
+        past_it = round(past_ms/dt); % past_ms in terms of iterations
+        fprintf("past: %d ms\n", past_ms);
     end 
     
     fprintf("training starts at %d s\n", imin * dt/1000);
@@ -145,7 +147,7 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    BIAS = 1000;%1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
     Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
     step = 20; % optimize with RLS only every 20 steps  
@@ -171,8 +173,10 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
         % I = IPSC + feedback_gate*E*z + BIAS + ext_sinusoid(i); % PSC + External Sinusoidal Input
-        I = IPSC + E*z + BIAS + A_ * zx(:,i-past) * (rand(N,1) < p_) * (i > imin & i < icrit_2);
-
+        I = IPSC + E*z + BIAS;
+        if i > imin && exist('icrit_2', 'var') && i < icrit_2
+            I = I + A_ * zx(:,i-past_it-1) * (rand(N,1) < p_);
+        end 
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
@@ -245,8 +249,21 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     errors_after_training = losses(icrit:end); % losses at each dt after RLS is turned off
     AverageError = mean(errors_after_training);
     
+    % Average Error in stage-1 and stage-2
+    if exist('icrit_2', 'var')
+        errors_stage1 = losses(icrit:icrit_2);
+        errors_stage2 = losses(icrit_2:end);
+        AverageErrorStage1 = mean(errors_stage1);
+        AverageErrorStage2 = mean(errors_stage2);
+    end
+    
     fprintf("Average Firing Rate: %f\n", AverageFiringRate);
     fprintf("Average Error: %f\n", AverageError);
+    
+    if exist('icrit_2', 'var')
+        fprintf("Average Error Stage-1: %f\n", AverageErrorStage1);
+        fprintf("Average Error Stage-2: %f\n", AverageErrorStage2);
+    end
     %% Plotting neurons before and after learning
     % "normalize" membrane potential,
     % add 'j' to the membrane potential of neuron j so that the curves do not
@@ -326,15 +343,15 @@ if seed == 10
     ylabel('Neuron Index')
     title('Raster plot')
     ylim([0,100])
-end  
-%{
+    
     % plot general network activity
     figure(4)
     plot(dt*(1:1:nt)/1000, y(2:end), 'LineWidth', 2)
     xlabel('Time (s)')
     ylabel('$y(t)$','Interpreter','LaTeX')
     title('General Network Activity')
-%}
+end  
+
 %{            
     % plot activity descriptor of neuron 1
     figure(6)
