@@ -53,7 +53,7 @@ function [AverageFiringRate, AverageError] = IZFORCESINE(seed)
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
     zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     
-    n_slices = 0;
+    n_slices = 0; % 0: mono-dimensional / otherwise discretize
     if n_slices > 0
         [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
         md_zx = full(ind2vec(md_zx)); % one-hot encoding
