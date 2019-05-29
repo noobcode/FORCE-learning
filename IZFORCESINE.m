@@ -41,7 +41,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         nt = icrit_2 + round(10000/dt);
         A_ = 50; % amplitude of reinjected target signal
         p_ = 0.2; % percentage of neurons that get the additional current
-        past_ms = 0; % how much to look in the past for the value of the target signal [0-500]ms
+        past_ms = 300; % how much to look in the past for the value of the target signal [0-500]ms
         past_it = round(past_ms/dt); % past_ms in terms of iterations
         fprintf("past: %d ms\n", past_ms);
     end 
@@ -147,7 +147,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 1000;%1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    BIAS = 980;%1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
     %% 
     Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
     step = 20; % optimize with RLS only every 20 steps  
