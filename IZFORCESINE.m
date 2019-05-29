@@ -21,7 +21,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     iteration_per_second = round(1000/dt); % number of loop iterations per second
     iteration_per_target_cycle = round(iteration_per_second / target_frequency);
     
-    imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
+    %imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
+    imin = round(3000/dt);
     
     if training_setting == 0
         % 5 sec stabilization, 5 sec training, 5 sec post-training
@@ -36,34 +37,18 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     elseif training_setting == 2
         % 5 sec stabilization, max(5 sec, 20 cycles) training, 10+10 sec
         % training
-        icrit = imin + max(imin, 20 * iteration_per_target_cycle);
-        icrit_2 = icrit + round(10000/dt); % time when target signal is removed from input I
-        nt = icrit_2 + round(10000/dt);
-        A_ = 50; % amplitude of reinjected target signal
-        p_ = 0.2; % percentage of neurons that get the additional current
-        past_ms = 300; % how much to look in the past for the value of the target signal [0-500]ms
-        past_it = round(past_ms/dt); % past_ms in terms of iterations
-        fprintf("past: %d ms\n", past_ms);
+        %icrit = imin + max(imin, 20 * iteration_per_target_cycle);
+        %icrit_2 = icrit + round(10000/dt); % time when target signal is removed from input I
+        %nt = icrit_2 + round(10000/dt);
+        icrit = imin + max(round(5000/dt), 20 * iteration_per_target_cycle);
+        icrit_2 = icrit + max(round(5000/dt), 10 * iteration_per_target_cycle);
+        nt = icrit_2 + max(round(8000/dt), 10 * iteration_per_target_cycle);
     end 
     
     fprintf("training starts at %d s\n", imin * dt/1000);
     fprintf("training ends at %d s\n", icrit * dt/1000);
     fprintf("simulation ends at %d s\n", nt * dt/1000);
-    
-    losses = zeros(nt, 1);
-    
-    %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
-    zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
-    
-    n_slices = 0; % 0: mono-dimensional / otherwise discretize
-    if n_slices > 0
-        [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
-        md_zx = full(ind2vec(md_zx)); % one-hot encoding
-        zx = md_zx;
-    end
-    
-    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
-    fprintf("target dimension: %d\n", k);
+      
     %% Izhikevich Parameters
     N =  2000;  % Number of neurons
     a = 0.01; %adaptation reciprocal time constant
@@ -80,8 +65,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     td = 20; %decay time 
     p = 0.1; %sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
-    Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
-
+    %Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
+    Q=0;          % set Q=0 to remove feedback term
+                
     %Storage variables for synapse integration  
     IPSC = zeros(N,1); % post synaptic current 
     h = zeros(N,1); 
@@ -93,6 +79,32 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     v = vr + (vpeak-vr) * rand(N,1); %initial distribution 
     v_ = v; %These are just used for Euler integration, previous time step storage
     rng(seed) % default seed was 1
+    
+    %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
+    zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
+    
+    n_slices = 0; % 0: mono-dimensional / otherwise discretize
+    if n_slices > 0
+        [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
+        md_zx = full(ind2vec(md_zx)); % one-hot encoding
+        zx = md_zx;
+    end
+    
+    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
+    fprintf("target dimension: %d\n", k);
+    
+    %% Reinjected target signal parameters
+    input_target_amplitude = 30; % amplitude of reinjected target signal
+    pInp = 0.2; % percentage of neurons that get the additional current
+    input_target_recipients = (rand(N,1) < pInp);
+    input_target_indiv_coeff = 0.5 + 0.5 * rand(N,1);
+    input_target = zx ;
+    input_target_coeff = input_target_amplitude .* input_target_recipients .* input_target_indiv_coeff;
+    
+    past_ms = 50; % how much to look in the past for the value of the target signal [0-500]ms
+    past_it = round(past_ms/dt); % past_ms in terms of iterations
+    
+    fprintf("past: %d ms\n", past_ms);
     
     %% General Network Activity and Global Inhibition Term parameters 
     y = zeros(nt,1); % general network activity measure
@@ -121,34 +133,38 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     ext_sinusoid =  A * sin(omega * (1:1:nt) + phase); % external sinuoid
     
     %% Gating variables (1 open, 0 closed)
-    feedback_gate = 1; % gate for the feedback current {0,1}. for now keep it at 1
-    train_gate = 1; % gate for training the weights. 0: phase training
+    % if train_gate=0 then the weight update is done once at every cycle of
+    % the target signal, otherwise every 20 milliseconds
+    %train_gate = 1; % gate for training the weights. 0: phase training
                                                    % 1: continuous training
-    phase_percentage = 0; % 0 : 0 / 0.25 : 1/2 pi / 0.5 : pi ...
-    phase_training = round(phase_percentage * iteration_per_target_cycle); % at what percentage of the cycle to start training - [0,1]
+    %phase_percentage = 0; % 0 : 0 / 0.25 : 1/2 pi / 0.5 : pi ...
+    %phase_training = round(phase_percentage * iteration_per_target_cycle); % at what percentage of the cycle to start training - [0,1]
     
-    fprintf("train gate (0 phase, 1 time): %d\n", train_gate);
-    fprintf("train at phase percentage %.2f\n", phase_percentage);
+    %fprintf("train gate (0 phase, 1 time): %d\n", train_gate);
+    %fprintf("train at phase percentage %.2f\n", phase_percentage);
      %% load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
-        fprintf('loading old weights...\n');
+        fprintf('loading old weights...');
         weights_file = load('weights.mat');
         OMEGA = weights_file.OMEGA;
         BPhi = weights_file.BPhi;
         E = weights_file.E;
+        fprintf("done.\n");
     else
-        fprintf('initializing weights...\n');
+        fprintf('initializing weights...');
         OMEGA = G * (randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
         BPhi = zeros(N,k); %initial decoder.  Best to keep it at 0.
         E = (2*rand(N,k)-1)*Q;  %Weight matrix is OMEGA0 + E*BPhi';
+        fprintf("done.\n")
     end
-    %%
+    %% Some more initializations
     z = zeros(k,1);  %initial approximant
     tspike = zeros(5*nt,2);  %If you want to store spike times, 
     ns = 0; %count total number of spikes
     ns_t = 0; % number of spikes at time t
-    BIAS = 980;%1000; % Bias current, note that the Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
-    %% 
+    BIAS = 1000; % Bias current. The Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    
+    %% RLS parameters
     Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
     step = 20; % optimize with RLS only every 20 steps  
     current = zeros(nt,k);  %store the approximant 
@@ -156,6 +172,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     REC = zeros(nt,10); %Store voltage and adaptation variables for plotting 
     i=1;
     
+    err = zeros(k,1);
+    losses = zeros(nt, 1);
+   
     %% SIMULATION
     tic
     ilast = i ;
@@ -165,18 +184,15 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         % measure general network activity
         y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau;
         % activity descriptor of neuron 1
-        y_ad(i+1) = y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad;
-        
+        y_ad(i+1) = max(0, y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad);
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
         %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
-        % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term Depression
-        % I = IPSC + feedback_gate*E*z + BIAS + ext_sinusoid(i); % PSC + External Sinusoidal Input
-        I = IPSC + E*z + BIAS;
-        if i > imin && exist('icrit_2', 'var') && i < icrit_2
-            I = I + A_ * zx(:,i-past_it-1) * (rand(N,1) < p_);
-        end 
+        % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term
+        % Depression <-- NO
+        I = IPSC + E*z + BIAS +  input_target(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
+
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
@@ -206,13 +222,20 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             r = r*exp(-dt/tr) + hr*dt; 
             hr = hr*exp(-dt/td) + (v>=vpeak)/(tr*td);
         end
-
+        %% Compute approximant and error
         z = BPhi' * r; % approximant
-        err = z - zx(:,i); % error
+        if ( (i-past_it)>1 )
+            err = z - zx(: , i-past_it); % error with respect to time-shifted target
+        else
+            err = zeros(k,1);
+        end
+        
+        %err = z - zx(:,i); % error
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
         if i > imin && i < icrit
-            if (~train_gate) * mod(i-imin, iteration_per_target_cycle) == 1 + phase_training || train_gate * mod(i,step)==1
+            % double check --> if (~train_gate) * mod(i-imin, iteration_per_target_cycle) == 1 + phase_training || train_gate * mod(i,step)==1
+            if mod(i,step)==1    
                 cd = Pinv * r;
                 BPhi = BPhi - (cd * err');
                 Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
@@ -315,6 +338,7 @@ if seed == 10
         xlabel('Time (s)')
         ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
         legend('Training interval', 'Target Signal', 'Approximant','Location', 'best')
+        xlim([0,nt*dt/1000]);
         hold off
     end
             
@@ -329,6 +353,7 @@ if seed == 10
     legend('Training interval', 'Error','Location', 'best')
     xlabel('Time (s)')
     ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
+    xlim([0,nt*dt/1000]);
     set(gca, 'YScale', 'log')
     title('Error curve')
 
@@ -343,6 +368,7 @@ if seed == 10
     ylabel('Neuron Index')
     title('Raster plot')
     ylim([0,100])
+    xlim([0,nt*dt/1000]);
     
     % plot general network activity
     figure(4)
@@ -350,6 +376,7 @@ if seed == 10
     xlabel('Time (s)')
     ylabel('$y(t)$','Interpreter','LaTeX')
     title('General Network Activity')
+    xlim([0,nt*dt/1000]);
 end  
 
 %{            
