@@ -5,14 +5,14 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     clc
     
     %% frequency and phase of target signal
-    target_frequency = 5;
+    target_frequency = 10;
     target_phase = 0;
     fprintf("target frequency: %.2f\n", target_frequency);
     fprintf("target phase: %f\n", target_phase);
     
     %%
     load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
-    training_setting = 2; % 0: time-based training
+    training_setting = 0; % 0: time-based training
                           % 1: cycle-based training
                           % 2: max(5 seconds, 20 cycles) training 
     fprintf("training setting %d\n", training_setting);
@@ -21,8 +21,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     iteration_per_second = round(1000/dt); % number of loop iterations per second
     iteration_per_target_cycle = round(iteration_per_second / target_frequency);
     
-    %imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
-    imin = round(3000/dt);
+    imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
     
     if training_setting == 0
         % 5 sec stabilization, 5 sec training, 5 sec post-training
@@ -40,6 +39,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         %icrit = imin + max(imin, 20 * iteration_per_target_cycle);
         %icrit_2 = icrit + round(10000/dt); % time when target signal is removed from input I
         %nt = icrit_2 + round(10000/dt);
+        imin = round(3000/dt);
         icrit = imin + max(round(5000/dt), 20 * iteration_per_target_cycle);
         icrit_2 = icrit + max(round(5000/dt), 10 * iteration_per_target_cycle);
         nt = icrit_2 + max(round(8000/dt), 10 * iteration_per_target_cycle);
@@ -65,10 +65,11 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     td = 20; %decay time 
     p = 0.1; %sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
-    %Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
-    Q=0;          % set Q=0 to remove feedback term
-                
-    %Storage variables for synapse integration  
+    Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
+    %Q=0;          % set Q=0 to remove feedback term
+       
+    fprintf("Feedback term: %d\n", Q ~= 0);
+    %% Storage variables for synapse integration  
     IPSC = zeros(N,1); % post synaptic current 
     h = zeros(N,1); 
     r = zeros(N,1);
@@ -83,7 +84,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
     zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     
-    n_slices = 0; % 0: mono-dimensional / otherwise discretize
+    n_slices = 10; % 0: mono-dimensional / otherwise discretize
     if n_slices > 0
         [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
         md_zx = full(ind2vec(md_zx)); % one-hot encoding
@@ -93,6 +94,11 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
     fprintf("target dimension: %d\n", k);
     
+    if n_slices > 0
+        fprintf("classification problem\n");
+    else 
+        fprintf("regression problem\n");
+    end
     %% Reinjected target signal parameters
     input_target_amplitude = 30; % amplitude of reinjected target signal
     pInp = 0.2; % percentage of neurons that get the additional current
@@ -101,7 +107,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     input_target = zx ;
     input_target_coeff = input_target_amplitude .* input_target_recipients .* input_target_indiv_coeff;
     
-    past_ms = 50; % how much to look in the past for the value of the target signal [0-500]ms
+    past_ms = 0; % how much to look in the past for the value of the target signal [0-500]ms
     past_it = round(past_ms/dt); % past_ms in terms of iterations
     
     fprintf("past: %d ms\n", past_ms);
@@ -187,15 +193,15 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         y_ad(i+1) = max(0, y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad);
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
-        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term
         % Depression <-- NO
-        I = IPSC + E*z + BIAS +  input_target(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
+        %I = IPSC + E*z + BIAS +  input_target(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
 
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
-        u = u + dt * (a*(b*(v_-vr) - u)); % u(t) = u(t-1) + dt*u'(t-1).
+        u = u + dt * (a*(b*(v_-vr) - u));                   % u(t) = u(t-1) + dt*u'(t-1).
         %%
         % reset all values to 0 before recomputing 'index'
         has_spiked(index) = 0;    
@@ -224,13 +230,14 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         end
         %% Compute approximant and error
         z = BPhi' * r; % approximant
-        if ( (i-past_it)>1 )
-            err = z - zx(: , i-past_it); % error with respect to time-shifted target
+        
+        % error with respect to time-shifted target
+        % set past_ms = 0 to compute the "normal" error
+        if ( (i-past_it) > 1 )
+            err = z - zx(: , i-past_it);
         else
             err = zeros(k,1);
-        end
-        
-        %err = z - zx(:,i); % error
+        end        
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
         if i > imin && i < icrit
@@ -240,7 +247,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
                 BPhi = BPhi - (cd * err');
                 Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
             end 
-         end
+        end
+         
         %% End iteration...store and reset.
         % if spike occurred, reset variables
         u = u + d*(v>=vpeak);  %implements set u to u+d if v>vpeak, component by component. 
@@ -250,7 +258,16 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         REC(i,:) = [v(1:5)',u(1:5)'];  
         current(i,:) = z';
         RECB(i,:) = BPhi(1:5);
-        losses(i) = sum(err.^2);
+        
+        % store loss
+        if n_slices > 0
+            % misclassification error
+            one_hot_z = round(z/sum(z)); % normalize to 0-1 then round
+            losses(i) = ~isequal(one_hot_z, zx(:,i));
+        else
+            % sum of squared errors
+            losses(i) = sum(err.^2);
+        end
         
         %% print elapsed time
         if mod(i,round(1000/dt))==0
@@ -337,7 +354,7 @@ if seed == 10
         plot(dt*(1:1:nt)/1000, current,'b--','LineWidth',2)
         xlabel('Time (s)')
         ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
-        legend('Training interval', 'Target Signal', 'Approximant','Location', 'best')
+        legend('Training', 'Target Signal', 'Approximant','Location', 'best')
         xlim([0,nt*dt/1000]);
         hold off
     end
@@ -350,7 +367,7 @@ if seed == 10
     hold on
     plot((1:1:nt)*dt/1000, losses, 'LineWidth',2)
     hold off
-    legend('Training interval', 'Error','Location', 'best')
+    legend('Training', 'Error','Location', 'best')
     xlabel('Time (s)')
     ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
     xlim([0,nt*dt/1000]);
