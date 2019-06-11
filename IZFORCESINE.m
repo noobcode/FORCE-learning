@@ -4,8 +4,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     close all
     clc
     
+    AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
     %% frequency and phase of target signal
-    target_frequency = 10;
+    target_frequency = 5;
     target_phase = 0;
     fprintf("target frequency: %.2f\n", target_frequency);
     fprintf("target phase: %f\n", target_phase);
@@ -15,6 +16,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     training_setting = 0; % 0: time-based training
                           % 1: cycle-based training
                           % 2: max(5 seconds, 20 cycles) training 
+                          
     fprintf("training setting %d\n", training_setting);
     %% simulation timings (start/end training, total time)
     dt = 0.04; % Integration time step in ms 
@@ -82,23 +84,34 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     rng(seed) % default seed was 1
     
     %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
-    zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
+    original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
+    zx = original_zx;
+    reconstructed_zx = zeros(size(original_zx));
     
     n_slices = 10; % 0: mono-dimensional / otherwise discretize
     if n_slices > 0
-        [md_zx, bin_edges] = discretize(zx, n_slices); % discretize target signal
-        md_zx = full(ind2vec(md_zx)); % one-hot encoding
-        zx = md_zx;
+        [zx_bin, bin_edges] = discretize(zx, n_slices); % discretize target signal
+        zx_onehot = full(ind2vec(zx_bin)); % one-hot encoding
+        %% smoothing
+        bin_centers = zeros(n_slices,1);
+        for i=1:n_slices
+            bin_centers(i) = (bin_edges(i) + bin_edges(i+1))/2;
+        end
+        
+        zx_smoothed = zeros(size(zx_onehot));
+        sigma_smoothing = 0.001; 
+
+        for i=1:nt
+            zx_smoothed(:,i) = exp(-(zx(:,i) - bin_centers).^2/sigma_smoothing);
+        end
+        % uncomment the signal you want (one-hot, one-hot + smoothing)
+        %zx = zx_onehot;
+        zx = zx_smoothed;
     end
     
     k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
     fprintf("target dimension: %d\n", k);
     
-    if n_slices > 0
-        fprintf("classification problem\n");
-    else 
-        fprintf("regression problem\n");
-    end
     %% Reinjected target signal parameters
     input_target_amplitude = 30; % amplitude of reinjected target signal
     pInp = 0.2; % percentage of neurons that get the additional current
@@ -178,7 +191,6 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     REC = zeros(nt,10); %Store voltage and adaptation variables for plotting 
     i=1;
     
-    err = zeros(k,1);
     losses = zeros(nt, 1);
    
     %% SIMULATION
@@ -248,7 +260,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
                 Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
             end 
         end
-         
+
         %% End iteration...store and reset.
         % if spike occurred, reset variables
         u = u + d*(v>=vpeak);  %implements set u to u+d if v>vpeak, component by component. 
@@ -261,9 +273,14 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         
         % store loss
         if n_slices > 0
-            % misclassification error
-            one_hot_z = round(z/sum(z)); % normalize to 0-1 then round
-            losses(i) = ~isequal(one_hot_z, zx(:,i));
+            %% uncomment this for misclassification error
+            %one_hot_z = round(z/sum(z)); % normalize to 0-1 then round
+            %losses(i) = ~isequal(one_hot_z, zx(:,i));
+            
+            %% uncomment this for target reconstruction
+            max_out = max(z); % maxout
+            losses(i) = (max_out - original_zx(:,i))^2;
+            reconstructed_zx(:,i) = max_out;
         else
             % sum of squared errors
             losses(i) = sum(err.^2);
@@ -348,7 +365,7 @@ if seed == 10
         figure(2)
         min_ = min(min(zx),min(current));
         max_ = max(max(zx),max(current));
-        patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
+        patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
         hold on
         plot(dt*(1:1:nt)/1000, zx,'k','LineWidth',2)
         plot(dt*(1:1:nt)/1000, current,'b--','LineWidth',2)
@@ -359,13 +376,13 @@ if seed == 10
         hold off
     end
             
-    % plot squared error
+    % plot error
     figure(5)
     min_ = min(losses);
     max_ = max(losses);
-    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
     hold on
     plot((1:1:nt)*dt/1000, losses, 'LineWidth',2)
+    patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
     hold off
     legend('Training', 'Error','Location', 'best')
     xlabel('Time (s)')
@@ -378,8 +395,8 @@ if seed == 10
     figure(14)
     min_ = 0;
     max_ = 100;
-    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
     hold on
+    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
     plot(tspike(1:ns,2)/1000, tspike(1:ns,1),'k.')
     xlabel('Time (s)')
     ylabel('Neuron Index')
@@ -394,6 +411,20 @@ if seed == 10
     ylabel('$y(t)$','Interpreter','LaTeX')
     title('General Network Activity')
     xlim([0,nt*dt/1000]);
+    
+    % plot target reconstruction
+    figure(7)
+    min_ = min(min(original_zx), min(reconstructed_zx));
+    max_ = max(max(original_zx), max(reconstructed_zx));
+    hold on
+    patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
+    plot(dt*(1:1:nt)/1000, original_zx,'k','LineWidth',2)
+    plot(dt*(1:1:nt)/1000, reconstructed_zx,'b--','LineWidth',2)
+    xlabel('Time (s)')
+    ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
+    legend('Training', 'Target Signal', 'Reconstructed approximant','Location', 'best')
+    xlim([0,nt*dt/1000]);
+    hold off
 end  
 
 %{            
