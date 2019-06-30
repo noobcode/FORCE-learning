@@ -1,6 +1,7 @@
 function [x_filtered] = lowpass(x, dt, tau)
-    %% Return RC low-pass filter output samples, given input samples,
-    % time interval dt, and time constant tau
+    %% Low-pass filter output signal for target reconstruction
+    % apply a low-pass filter to input samples 'x', using integration time
+    % step 'dt', and time constant 'tau'
     % y[i] := α * x[i] + (1-α) * y[i-1]
     
     dims = size(x);

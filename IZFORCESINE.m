@@ -83,38 +83,22 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     v_ = v; %These are just used for Euler integration, previous time step storage
     rng(seed) % default seed was 1
     
-    %% Target signal
+    %% Target signal, discretization, smoothing, dimensionality
     original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     zx = original_zx;
     reconstructed_zx = zeros(size(original_zx));
     
-    %% Target discretization and smoothing
+    % Target discretization and smoothing
     n_slices = 20; % 0: mono-dimensional / otherwise discretize
     smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
+    sigma_smoothing = 0.005; 
     
     if n_slices > 0
-        % discretize target
-        [zx_bin, bin_edges] = discretize(original_zx, n_slices); % discretize target signal
-        
-        % smooth multi-dimensional target or use one-hot target
-        if smoothing
-            sigma_smoothing = 0.005; 
-            bin_centers = zeros(n_slices,1);
-        
-            % compute bin centers
-            for i=1:n_slices
-                bin_centers(i) = (bin_edges(i) + bin_edges(i+1))/2;
-            end
-        
-            % smooth the one-hot encoded target
-            zx = exp(-(original_zx - bin_centers).^2/sigma_smoothing);
-        else
-            % one-hot target
-            zx = full(ind2vec(zx_bin)); % one-hot encoding
-        end
+        zx = discretize_and_smooth(original_zx, n_slices, smoothing, sigma_smoothing);
     end
-    %%
-    k = min(size(zx)); % get approximant dimensionality
+ 
+    % get approximant dimensionality
+    k = min(size(zx)); 
     fprintf("target dimension: %d\n", k);
     
     %% Reinjected target signal parameters
