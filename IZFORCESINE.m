@@ -65,7 +65,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     u = zeros(N,1);  %initialize adaptation 
     tr = 2;  %synaptic rise time 
     td = 20; %decay time 
-    p = 0.1; %sparsity
+    p = 0.1; % sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
     Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
     %Q=0;          % set Q=0 to remove feedback term
@@ -83,33 +83,38 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     v_ = v; %These are just used for Euler integration, previous time step storage
     rng(seed) % default seed was 1
     
-    %% Target signal  COMMENT OUT TEACHER YOU DONT WANT, COMMENT IN TEACHER YOU WANT.
+    %% Target signal
     original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
     zx = original_zx;
     reconstructed_zx = zeros(size(original_zx));
     
-    n_slices = 10; % 0: mono-dimensional / otherwise discretize
-    if n_slices > 0
-        [zx_bin, bin_edges] = discretize(zx, n_slices); % discretize target signal
-        zx_onehot = full(ind2vec(zx_bin)); % one-hot encoding
-        %% smoothing
-        bin_centers = zeros(n_slices,1);
-        for i=1:n_slices
-            bin_centers(i) = (bin_edges(i) + bin_edges(i+1))/2;
-        end
-        
-        zx_smoothed = zeros(size(zx_onehot));
-        sigma_smoothing = 0.001; 
-
-        for i=1:nt
-            zx_smoothed(:,i) = exp(-(zx(:,i) - bin_centers).^2/sigma_smoothing);
-        end
-        % uncomment the signal you want (one-hot, one-hot + smoothing)
-        %zx = zx_onehot;
-        zx = zx_smoothed;
-    end
+    %% Target discretization and smoothing
+    n_slices = 20; % 0: mono-dimensional / otherwise discretize
+    smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
     
-    k = min(size(zx)); % get approximant dimensionality. 1 unless a k-dimensional target function.
+    if n_slices > 0
+        % discretize target
+        [zx_bin, bin_edges] = discretize(original_zx, n_slices); % discretize target signal
+        
+        % smooth multi-dimensional target or use one-hot target
+        if smoothing
+            sigma_smoothing = 0.005; 
+            bin_centers = zeros(n_slices,1);
+        
+            % compute bin centers
+            for i=1:n_slices
+                bin_centers(i) = (bin_edges(i) + bin_edges(i+1))/2;
+            end
+        
+            % smooth the one-hot encoded target
+            zx = exp(-(original_zx - bin_centers).^2/sigma_smoothing);
+        else
+            % one-hot target
+            zx = full(ind2vec(zx_bin)); % one-hot encoding
+        end
+    end
+    %%
+    k = min(size(zx)); % get approximant dimensionality
     fprintf("target dimension: %d\n", k);
     
     %% Reinjected target signal parameters
@@ -129,8 +134,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     y = zeros(nt,1); % general network activity measure
     gamma = 0; %100 % coefficient of y
     tau = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
-    %g = 1.6; % network gain
-    g = 1 / sqrt(p);
+    %g = 1.6; % network high gain
+    g = 1 / sqrt(p); % Clopath gain
     sigma = g / sqrt(p * N); % std. deviation of static weight matrix  
     
     fprintf("network gain: %.2f\n", g);
@@ -143,7 +148,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     tau_ad = 10/dt; % time constant of activity descriptor
     
     %% oscillations by means of external sinusoidal input current
-    A = 200; %500; %25; % wave amplitude
+    A = 200; % wave amplitude
     f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
     omega =  2*pi*f; % angular frequency (radians per second)
     omega = omega * (dt/1000);
@@ -202,15 +207,16 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         % measure general network activity
         y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau;
         % activity descriptor of neuron 1
-        y_ad(i+1) = max(0, y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad);
+        %y_ad(i+1) = max(0, y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad);
         %% EULER INTEGRATE
         % uncomment the type of current you want to use
-        I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
+        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term
         % Depression <-- NO
         %I = IPSC + E*z + BIAS +  input_target(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
-
+        I = IPSC + selective_feedback(E)*z + BIAS; % selective feedback
+        
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u));                   % u(t) = u(t-1) + dt*u'(t-1).
@@ -278,9 +284,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             %losses(i) = ~isequal(one_hot_z, zx(:,i));
             
             %% uncomment this for target reconstruction
-            max_out = max(z); % maxout
-            losses(i) = (max_out - original_zx(:,i))^2;
-            reconstructed_zx(:,i) = max_out;
+            reconstructed_zx(:,i) = max(z); % max-out
         else
             % sum of squared errors
             losses(i) = sum(err.^2);
@@ -292,6 +296,12 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         end
     end
     % end simulation
+    
+    %% filtering the reconstructed target
+    tau_rec = 20/dt; % low-pass filter time constant
+    reconstructed_zx = lowpass(reconstructed_zx, dt, tau_rec);
+    losses = (reconstructed_zx - original_zx).^2;
+    
     %% saving weights
     save('weights.mat', 'OMEGA', 'BPhi', 'E');
 
