@@ -5,6 +5,22 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     clc
     
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
+    
+    %% Main experimental parameters
+    %past_ms=0;  %time-shift of the target (in ms)
+    %pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
+
+
+    %bias_OMEGA = 0.0;
+    
+    % input distributed onto reservoir neurons with probability pInput
+    %constant_BIAS = 0;                  pBias = 0.1; A_add_BIAS = 100;
+    input_external_sin_to_network = 1;  pSin = 0.2;
+    %input_target_to_network = 0;        pInput = 0.25; A_it = 50;
+
+    global_inhibition = 0; % set to 1 to implement a model of global inhibition
+    exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
+    
     %% frequency and phase of target signal
     target_frequency = 5;
     target_phase = 0;
@@ -89,7 +105,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     reconstructed_zx = zeros(size(original_zx));
     
     % Target discretization and smoothing
-    n_slices = 20; % 0: mono-dimensional / otherwise discretize
+    n_slices = 0; % 0: mono-dimensional / otherwise discretize
     smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
     sigma_smoothing = 0.005; 
     
@@ -106,7 +122,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     pInp = 0.2; % percentage of neurons that get the additional current
     input_target_recipients = (rand(N,1) < pInp);
     input_target_indiv_coeff = 0.5 + 0.5 * rand(N,1);
-    input_target = zx ;
+    %input_target = zx ;
     input_target_coeff = input_target_amplitude .* input_target_recipients .* input_target_indiv_coeff;
     
     past_ms = 0; % how much to look in the past for the value of the target signal [0-500]ms
@@ -116,8 +132,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %% General Network Activity and Global Inhibition Term parameters 
     y = zeros(nt,1); % general network activity measure
-    gamma = 0; %100 % coefficient of y
-    tau = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
+    A_inh = 0; %100 % coefficient of y
+    tau_inh = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
+    
     %g = 1.6; % network high gain
     g = 1 / sqrt(p); % Clopath gain
     sigma = g / sqrt(p * N); % std. deviation of static weight matrix  
@@ -126,19 +143,23 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     %% Synaptic fatigue / Short-term Depression
     has_spiked = zeros(N,1); % binary vector that tells if a neuron has spiked
     index = []; % indeces of neurons that spiked at the current iteration
-     
-    % activity descriptor of neuron 1
-    y_ad = zeros(nt,1);
+
+    y_ad = ones(N,1); % activity descriptor of each neuron
     tau_ad = 10/dt; % time constant of activity descriptor
+    exhaustion_coeff = 0.1;
     
     %% oscillations by means of external sinusoidal input current
-    A = 200; % wave amplitude
-    f = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
-    omega =  2*pi*f; % angular frequency (radians per second)
+    A_ext_sin = 200; % wave amplitude of external sinusoid
+    f_ext_sin = 4; % oscillation frequency (Hz) [theta oscillations 4-10 Hz]
+    omega =  2*pi*f_ext_sin; % angular frequency (radians per second)
     omega = omega * (dt/1000);
-    phase = 0; % phase -- e.g. 1/2*pi
+    phase_ext_sin = 0; % phase -- e.g. 1/2*pi
     
-    ext_sinusoid =  A * sin(omega * (1:1:nt) + phase); % external sinuoid
+    ext_sinusoid =  A_ext_sin * sin(omega * (1:1:nt) + phase_ext_sin); % external sinuoid
+    if input_external_sin_to_network == 1
+       ext_sinusoid_distrib = ones(N,1) .* (rand(N,1)<pSin);
+       ext_sin = ext_sinusoid .* ext_sinusoid_distrib;
+    end
     
     %% Gating variables (1 open, 0 closed)
     % if train_gate=0 then the weight update is done once at every cycle of
@@ -177,7 +198,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     step = 20; % optimize with RLS only every 20 steps  
     current = zeros(nt,k);  %store the approximant 
     RECB = zeros(nt,5); %store the decoders 
-    REC = zeros(nt,10); %Store voltage and adaptation variables for plotting 
+    REC = zeros(nt,10); %Store voltage and adaptation variables for plotting
+    RECy_ad = zeros(nt,5); % stores the exhaustion state of synapses of a given neuron
     i=1;
     
     losses = zeros(nt, 1);
@@ -189,35 +211,58 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     % performance before icrit.  
     for i = ilast:1:nt    
         % measure general network activity
-        y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau;
-        % activity descriptor of neuron 1
-        %y_ad(i+1) = max(0, y_ad(i) + dt * (- y_ad(i) - has_spiked(1) + 1) / tau_ad);
+        y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau_inh;
+        
+        if exhaustion == 1
+            y_ad = max(0, y_ad * (1-dt/tau_ad) + (dt / tau_ad) * ones(N,1)...
+            - exhaustion_coeff * has_spiked); % activity descriptor of individual neuron 
+        end
+        
         %% EULER INTEGRATE
-        % uncomment the type of current you want to use
+        % current
+        I = IPSC + E*z + BIAS;    % postsynaptic current (PSC)
+        
+        if global_inhibition == 1
+            I = I - A_inh*y(i+1);     % PSC + Global Inhibition
+        end
+        
+        if input_external_sin_to_network == 1
+            I = I + ext_sin(:,i);                  % PSC + External Sinusoidal Input
+        end
+        
         %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
         % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
         % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term
         % Depression <-- NO
-        %I = IPSC + E*z + BIAS +  input_target(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
-        I = IPSC + selective_feedback(E)*z + BIAS; % selective feedback
+        %I = IPSC + E*z + BIAS +  zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
+        %I = IPSC + selective_feedback(E)*z + BIAS; % selective feedback
         
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u));                   % u(t) = u(t-1) + dt*u'(t-1).
         %%
-        % reset all values to 0 before recomputing 'index'
-        has_spiked(index) = 0;    
-        index = find(v >= vpeak);
+        if (~isempty(index))
+            has_spiked(index) = 0; % reset all values to 0 before recomputing 'index'   
+        end
+        index = find(v >= vpeak); % get index of neurons that fired
         has_spiked(index) = 1; % set binary values to 1 for neurons that have spiked
         ns_t = length(index); % number of spikes at time t
-        
-        if length(index) > 0
-            JD = sum(OMEGA(:,index), 2); %compute the increase in current due to spiking  
-            tspike(ns+1:ns+length(index),:) = [index,0*index + dt*i];  %uncomment this
-            %if you want to store spike times.  Takes longer.
+                
+        if ~isempty(index)
+            if exhaustion==1
+                OMEGA_temp = OMEGA;
+                for ii = index'
+                    OMEGA_temp(:,ii) = y_ad(ii) .* OMEGA(:,ii);
+                end
+                JD = sum(OMEGA_temp(:,index),2); % compute the increase in current due to spiking
+            else
+                JD = sum(OMEGA(:,index),2); % compute the increase in current due to spiking  
+            end
+              
+            tspike(ns+1:ns+length(index),:) = [index,0*index + dt*i];  %  store spike times. Takes longer.
             ns = ns + ns_t; 
         end
-
+        %% exponential filters
         if tr == 0
             %synapse for single exponential
             IPSC = IPSC*exp(-dt/td) + JD*(length(index)>0)/(td);
@@ -260,6 +305,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         REC(i,:) = [v(1:5)',u(1:5)'];  
         current(i,:) = z';
         RECB(i,:) = BPhi(1:5);
+        RECy_ad(i,:) = y_ad(1:5)'; 
         
         % store loss
         if n_slices > 0
@@ -283,9 +329,10 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %% filtering the reconstructed target
     tau_rec = 20/dt; % low-pass filter time constant
-    reconstructed_zx = lowpass(reconstructed_zx, dt, tau_rec);
-    losses = (reconstructed_zx - original_zx).^2;
-    
+    if n_slices > 0
+        reconstructed_zx = lowpass(reconstructed_zx, dt, tau_rec);
+        losses = (reconstructed_zx - original_zx).^2;
+    end
     %% saving weights
     save('weights.mat', 'OMEGA', 'BPhi', 'E');
 
