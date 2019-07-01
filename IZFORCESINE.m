@@ -8,16 +8,16 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %% Main experimental parameters
     past_ms = 10;  % time-shift of the target (in ms) [keep it in 0-500]
-    %pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
+    pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
 
-
-    %bias_OMEGA = 0.0;
-    
+    bias_OMEGA = 0.0; 
+ 
     % input distributed onto reservoir neurons with probability pInput
-    %constant_BIAS = 0;                  pBias = 0.1; A_add_BIAS = 100;
+    constant_BIAS = 0; pBias = 0.1; A_add_BIAS = 100;
     
     % external sinusiod params
     input_external_sin_to_network = 0;  pSin = 0.2;
+    
     % target injection params
     input_target_to_network = 1; pInput = 0.25; A_it = 50;
 
@@ -178,20 +178,25 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         OMEGA = weights_file.OMEGA;
         BPhi = weights_file.BPhi;
         E = weights_file.E;
-        fprintf("done.\n");
     else
         fprintf('initializing weights...');
-        OMEGA = G * (randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
+        OMEGA = G * (bias_OMEGA + randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
+        % bias_OMEGA is zero in Nicola & Clopath
         BPhi = zeros(N,k); %initial decoder.  Best to keep it at 0.
-        E = (2*rand(N,k)-1)*Q;  %Weight matrix is OMEGA0 + E*BPhi';
-        fprintf("done.\n")
+        E = (2*rand(N,k)-1)*Q; % Weight matrix is OMEGA0 + E*BPhi';
+        %Eta_rand = (rand(N,k)<pEta);
+        %E = rand(N,k)*Q .* Eta_rand;
     end
+    fprintf("done.\n")
     %% Some more initializations
-    z = zeros(k,1);  %initial approximant
-    tspike = zeros(5*nt,2);  %If you want to store spike times, 
-    ns = 0; %count total number of spikes
+    z = zeros(k,1);  % initial approximant
+    tspike = zeros(5*nt,2);  % store spike times, 
+    ns = 0; % count cumulative total number of spikes
     ns_t = 0; % number of spikes at time t
     BIAS = 1000; % Bias current. The Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    if constant_BIAS == 1
+        BIAS = BIAS + A_add_BIAS * (rand(N,1)<pBias);  % add constant bias to some neurons
+    end
     
     %% RLS parameters
     Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
@@ -269,12 +274,12 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         %% exponential filters
         if tr == 0
             %synapse for single exponential
-            IPSC = IPSC*exp(-dt/td) + JD*(length(index)>0)/(td);
+            IPSC = IPSC*exp(-dt/td) + JD*(~isempty(index))/(td);
             r = r * exp(-dt/td) + (v>=vpeak)/td;
         else
             %synapse for double exponential
             IPSC = IPSC*exp(-dt/tr) + h*dt;
-            h = h*exp(-dt/td) + JD*(length(index)>0)/(tr*td);  %Integrate the current
+            h = h*exp(-dt/td) + JD*(~isempty(index))/(tr*td);  %Integrate the current
 
             r = r*exp(-dt/tr) + hr*dt; 
             hr = hr*exp(-dt/td) + (v>=vpeak)/(tr*td);
