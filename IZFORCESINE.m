@@ -7,7 +7,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
     
     %% Main experimental parameters
-    %past_ms=0;  %time-shift of the target (in ms)
+    past_ms = 10;  % time-shift of the target (in ms) [keep it in 0-500]
     %pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
 
 
@@ -15,11 +15,14 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     % input distributed onto reservoir neurons with probability pInput
     %constant_BIAS = 0;                  pBias = 0.1; A_add_BIAS = 100;
+    
+    % external sinusiod params
     input_external_sin_to_network = 0;  pSin = 0.2;
-    %input_target_to_network = 0;        pInput = 0.25; A_it = 50;
+    % target injection params
+    input_target_to_network = 1; pInput = 0.25; A_it = 50;
 
     global_inhibition = 0; % set to 1 to implement a model of global inhibition
-    exhaustion = 1;  % set to 1 to implement a model of synaptic fatigue / STD
+    exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
     
     %% frequency and phase of target signal
     target_frequency = 5;
@@ -29,7 +32,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %%
     load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
-    training_setting = 0; % 0: time-based training
+    training_setting = 2; % 0: time-based training
                           % 1: cycle-based training
                           % 2: max(5 seconds, 20 cycles) training 
                           
@@ -118,14 +121,11 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     fprintf("target dimension: %d\n", k);
     
     %% Reinjected target signal parameters
-    input_target_amplitude = 30; % amplitude of reinjected target signal
-    pInp = 0.2; % percentage of neurons that get the additional current
-    input_target_recipients = (rand(N,1) < pInp);
+    input_target_amplitude = A_it; % amplitude of reinjected target signal
+    input_target_recipients = (rand(N,1) < pInput);
     input_target_indiv_coeff = 0.5 + 0.5 * rand(N,1);
-    %input_target = zx ;
     input_target_coeff = input_target_amplitude .* input_target_recipients .* input_target_indiv_coeff;
     
-    past_ms = 0; % how much to look in the past for the value of the target signal [0-500]ms
     past_it = round(past_ms/dt); % past_ms in terms of iterations
     
     fprintf("past: %d ms\n", past_ms);
@@ -228,6 +228,10 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         
         if input_external_sin_to_network == 1
             I = I + ext_sin(:,i);                  % PSC + External Sinusoidal Input
+        end
+        
+        if input_target_to_network == 1
+            I = I +  zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); %only until icrit2
         end
         
         %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
