@@ -15,10 +15,10 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     % input distributed onto reservoir neurons with probability pInput
     %constant_BIAS = 0;                  pBias = 0.1; A_add_BIAS = 100;
-    input_external_sin_to_network = 1;  pSin = 0.2;
+    input_external_sin_to_network = 0;  pSin = 0.2;
     %input_target_to_network = 0;        pInput = 0.25; A_it = 50;
 
-    global_inhibition = 0; % set to 1 to implement a model of global inhibition
+    global_inhibition = 1; % set to 1 to implement a model of global inhibition
     exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
     
     %% frequency and phase of target signal
