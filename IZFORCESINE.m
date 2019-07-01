@@ -132,12 +132,12 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %% General Network Activity and Global Inhibition Term parameters 
     y = zeros(nt,1); % general network activity measure
-    A_inh = 0; %100 % coefficient of y
+    A_inh = 100; %100 % coefficient of y
     tau_inh = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
     
-    %g = 1.6; % network high gain
-    g = 1 / sqrt(p); % Clopath gain
-    sigma = g / sqrt(p * N); % std. deviation of static weight matrix  
+    g = 1.6; % network high gain
+    %g = 1; % Clopath gain
+    sigma = g / ( p*sqrt(N) ); % std. deviation of static weight matrix  
     
     fprintf("network gain: %.2f\n", g);
     %% Synaptic fatigue / Short-term Depression
