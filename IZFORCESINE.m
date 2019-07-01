@@ -18,8 +18,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     input_external_sin_to_network = 0;  pSin = 0.2;
     %input_target_to_network = 0;        pInput = 0.25; A_it = 50;
 
-    global_inhibition = 1; % set to 1 to implement a model of global inhibition
-    exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
+    global_inhibition = 0; % set to 1 to implement a model of global inhibition
+    exhaustion = 1;  % set to 1 to implement a model of synaptic fatigue / STD
     
     %% frequency and phase of target signal
     target_frequency = 5;
@@ -135,8 +135,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     A_inh = 100; %100 % coefficient of y
     tau_inh = 100/dt; % parameter of spike smoothing, frequency and/or duration of network burst (keep it to 100-150)
     
-    g = 1.6; % network high gain
-    %g = 1; % Clopath gain
+    %g = 1.6; % network high gain
+    g = 1; % Clopath gain
     sigma = g / ( p*sqrt(N) ); % std. deviation of static weight matrix  
     
     fprintf("network gain: %.2f\n", g);
