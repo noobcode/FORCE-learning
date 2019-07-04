@@ -7,7 +7,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
     
     %% Main experimental parameters
-    past_ms = 10;  % time-shift of the target (in ms) [keep it in 0-500]
+    past_ms = 0;  % time-shift of the target (in ms) [keep it in 0-500]
     pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
 
     bias_OMEGA = 0.0; 
@@ -19,10 +19,16 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     input_external_sin_to_network = 0;  pSin = 0.2;
     
     % target injection params
-    input_target_to_network = 1; pInput = 0.25; A_it = 50;
+    input_target_to_network = 0; pInput = 0.25; A_it = 50;
 
     global_inhibition = 0; % set to 1 to implement a model of global inhibition
     exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
+    selective_feedback = 1; % set to 1 to project each dimension of 'z' to a different neurons cluster
+    
+    % Target discretization and smoothing
+    n_slices = 20; % 0: mono-dimensional / otherwise discretize
+    smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
+    sigma_smoothing = 0.1; % standard deviation of gaussian filter
     
     %% frequency and phase of target signal
     target_frequency = 5;
@@ -32,7 +38,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %%
     load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
-    training_setting = 2; % 0: time-based training
+    training_setting = 0; % 0: time-based training
                           % 1: cycle-based training
                           % 2: max(5 seconds, 20 cycles) training 
                           
@@ -55,11 +61,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         icrit = imin + 20 * iteration_per_target_cycle; % train for 20 cycles
         nt = icrit + 10 * iteration_per_target_cycle; % evaluate for 10 cycles
     elseif training_setting == 2
-        % 5 sec stabilization, max(5 sec, 20 cycles) training, 10+10 sec
-        % training
-        %icrit = imin + max(imin, 20 * iteration_per_target_cycle);
-        %icrit_2 = icrit + round(10000/dt); % time when target signal is removed from input I
-        %nt = icrit_2 + round(10000/dt);
+        % 3 sec stabilization, max(5 sec, 20 cycles) training, stage1, stage2 
         imin = round(3000/dt);
         icrit = imin + max(round(5000/dt), 20 * iteration_per_target_cycle);
         icrit_2 = icrit + max(round(5000/dt), 10 * iteration_per_target_cycle);
@@ -107,13 +109,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     zx = original_zx;
     reconstructed_zx = zeros(size(original_zx));
     
-    % Target discretization and smoothing
-    n_slices = 0; % 0: mono-dimensional / otherwise discretize
-    smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
-    sigma_smoothing = 0.005; 
-    
     if n_slices > 0
-        zx = discretize_and_smooth(original_zx, n_slices, smoothing, sigma_smoothing);
+        [zx, bin_edges, bin_centers] = discretize_and_smooth(original_zx, n_slices, smoothing, sigma_smoothing);
     end
  
     % get approximant dimensionality
@@ -171,6 +168,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     %fprintf("train gate (0 phase, 1 time): %d\n", train_gate);
     %fprintf("train at phase percentage %.2f\n", phase_percentage);
+    
      %% load weights omega, phi and eta or initialize them randomly
     if load_weights == 1
         fprintf('loading old weights...');
@@ -183,9 +181,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         OMEGA = G * (bias_OMEGA + randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
         % bias_OMEGA is zero in Nicola & Clopath
         BPhi = zeros(N,k); %initial decoder.  Best to keep it at 0.
-        E = (2*rand(N,k)-1)*Q; % Weight matrix is OMEGA0 + E*BPhi';
-        %Eta_rand = (rand(N,k)<pEta);
-        %E = rand(N,k)*Q .* Eta_rand;
+        E = (2*rand(N,k)-1)*Q .* (rand(N,k) < pEta); % Weight matrix is OMEGA0 + E*BPhi';
+        % set pEta to 1 to obtain standard Nicola & Clopath
+        %E = rand(N,k)*Q .* (rand(N,k) < pEta);
     end
     fprintf("done.\n")
     %% Some more initializations
@@ -194,8 +192,9 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     ns = 0; % count cumulative total number of spikes
     ns_t = 0; % number of spikes at time t
     BIAS = 1000; % Bias current. The Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
+    
     if constant_BIAS == 1
-        BIAS = BIAS + A_add_BIAS * (rand(N,1)<pBias);  % add constant bias to some neurons
+        BIAS = BIAS + A_add_BIAS * (rand(N,1) < pBias);  % add constant bias to some neurons
     end
     
     %% RLS parameters
@@ -214,7 +213,11 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     ilast = i ;
     %icrit = ilast; %uncomment this, and restart cell if you want to test
     % performance before icrit.  
-    for i = ilast:1:nt    
+    for i = ilast:1:nt
+        %% Elapsed time
+        if mod(i,250/dt) == 0
+            fprintf('Elapsed simulation time %dms\n', round((i-1)*dt));
+        end
         % measure general network activity
         y(i+1) = y(i) + dt * (- y(i) + ns_t) / tau_inh;
         
@@ -227,24 +230,22 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         % current
         I = IPSC + E*z + BIAS;    % postsynaptic current (PSC)
         
+        if selective_feedback == 1
+            % overwrite previous value of I
+            I = IPSC + selective_projection(E)*z + BIAS; % PSC + selective feedback of network output
+        end
+        
         if global_inhibition == 1
             I = I - A_inh*y(i+1);     % PSC + Global Inhibition
         end
         
         if input_external_sin_to_network == 1
-            I = I + ext_sin(:,i);                  % PSC + External Sinusoidal Input
+            I = I + ext_sin(:,i);     % PSC + External Sinusoidal Input
         end
         
         if input_target_to_network == 1
-            I = I +  zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); %only until icrit2
+            I = I + zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); % PSC + target injection
         end
-        
-        %I = IPSC + E*z + BIAS;                    % postsynaptic current (PSC)
-        % I = IPSC + E*z + BIAS - gamma*y(i+1);     % PSC + Global Inhibition
-        % I = IPSC + E*z + BIAS + OMEGA*has_spiked; % PSC + Short-term
-        % Depression <-- NO
-        %I = IPSC + E*z + BIAS +  zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); % or i > imin?
-        %I = IPSC + selective_feedback(E)*z + BIAS; % selective feedback
         
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
@@ -253,6 +254,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         if (~isempty(index))
             has_spiked(index) = 0; % reset all values to 0 before recomputing 'index'   
         end
+        
         index = find(v >= vpeak); % get index of neurons that fired
         has_spiked(index) = 1; % set binary values to 1 for neurons that have spiked
         ns_t = length(index); % number of spikes at time t
@@ -301,7 +303,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             if mod(i,step)==1    
                 cd = Pinv * r;
                 BPhi = BPhi - (cd * err');
-                Pinv = Pinv -((cd)*(cd'))/( 1 + (r')*(cd));
+                Pinv = Pinv - ((cd)*(cd'))/( 1 + (r')*(cd));
             end 
         end
 
@@ -323,26 +325,24 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             %losses(i) = ~isequal(one_hot_z, zx(:,i));
             
             %% uncomment this for target reconstruction
-            reconstructed_zx(:,i) = max(z); % max-out
+            [argvalue, index_max] = max(z);
+            reconstructed_zx(:,i) = bin_centers(index_max);
+            %reconstructed_zx(:,i) = z' * bin_centers;
         else
             % sum of squared errors
             losses(i) = sum(err.^2);
         end
         
-        %% print elapsed time
-        if mod(i,round(1000/dt))==0
-            fprintf("%d seconds out of %d\n", i*dt/1000, nt*dt/1000);
-        end
     end
     % end simulation
     
     %% filtering the reconstructed target
-    tau_rec = 20/dt; % low-pass filter time constant
+    tau_rec = 10/dt; % low-pass filter time constant
     if n_slices > 0
-        reconstructed_zx = lowpass(reconstructed_zx, dt, tau_rec);
+        %reconstructed_zx = filter_output(reconstructed_zx, dt, tau_rec);
         losses = (reconstructed_zx - original_zx).^2;
     end
-    %% saving weights
+    %% Save weights
     save('weights.mat', 'OMEGA', 'BPhi', 'E');
 
     %% Average Firing Rate and Average Error after training

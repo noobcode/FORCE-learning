@@ -1,4 +1,4 @@
-function [x_filtered] = lowpass(x, dt, tau)
+function [x_filtered] = filter_output(x, dt, tau)
     %% Low-pass filter output signal for target reconstruction
     % apply a low-pass filter to input samples 'x', using integration time
     % step 'dt', and time constant 'tau'

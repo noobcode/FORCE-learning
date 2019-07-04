@@ -1,4 +1,4 @@
-function [E] = selective_feedback(E)
+function [E] = selective_projection(E)
     %% Selective feedback of the network approximant 'z' weighed by static matrix 'E' (eta).
     % Inject the network approximant dimension 'z_i' only to the i-th
     % neuron cluster. The neurons clusters are consecutive with respect to

@@ -1,11 +1,11 @@
-function [zx_new] = discretize_and_smooth(zx, n_slices, smoothing, sigma_smoothing)
+function [zx_new, bin_edges, bin_centers] = discretize_and_smooth(zx, n_slices, smoothing, sigma_smoothing)
     %% input target signal discretization and smoothing
     % discretize target signal 'zx' in 'n_slices' classes.
     % if 'smoothing' = 1, then apply gaussian smoothing using standard deviation 'sigma_smoothing',
     % if 'smoothing' = 0, then use the one-hot encoded target.
     
     [zx_bin, bin_edges] = discretize(zx, n_slices); % discretize target signal
-        
+ 
     if smoothing
         %% smooth multi-dimensional target
         bin_centers = zeros(n_slices,1);
@@ -21,4 +21,5 @@ function [zx_new] = discretize_and_smooth(zx, n_slices, smoothing, sigma_smoothi
         %% one-hot multi-dimensional target
         zx_new = full(ind2vec(zx_bin)); % one-hot encoding
     end
+
 end
