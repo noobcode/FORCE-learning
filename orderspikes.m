@@ -3,7 +3,7 @@ function orderspikes(N, dt, tspike, startpoint, endpoint)
     %startpoint = 2.418*1000;  % in ms
     %endpoint = 2.4325*1000;
     
-    tspike2 = tspike( find( (tspike(:,2) > startpoint) & (tspike(:,2) < endpoint) ),:);
+    tspike2 = tspike( (tspike(:,2) > startpoint) & (tspike(:,2) < endpoint) ,:);
     %tspike2 = tspike( find( (tspike(:,2) < endpoint) ),:);
     
     [x,its] = sort(tspike2(:,2),1);
@@ -19,9 +19,13 @@ function orderspikes(N, dt, tspike, startpoint, endpoint)
         plotM = [plotM; M(tspike(i,1))];
     end
  
-    maxt = max(tspike(:,2)/1000); 
+    maxt = max(tspike(:,2)/1000);
     
     figure;
     plot(tspike(:,2)/1000, plotM,'.');
-    xlim([0,maxt]);
+    %xlim([0,maxt]);
+    
+    xlim([startpoint, endpoint] / 1000);
+    name_fig = sprintf('ordered_spikes_pattern_from_%d_to_%d.png', startpoint, endpoint);
+    saveas(gcf, strcat('Images/order_spikes/', name_fig));
 end

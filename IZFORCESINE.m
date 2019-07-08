@@ -1,4 +1,4 @@
-function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2] = IZFORCESINE(seed)
+function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2, tspike] = IZFORCESINE(seed)
     %% Force Method with Izhikevich Network 
     clearvars -except seed
     close all
@@ -23,15 +23,15 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
 
     global_inhibition = 0; % set to 1 to implement a model of global inhibition
     exhaustion = 0;  % set to 1 to implement a model of synaptic fatigue / STD
-    selective_feedback = 1; % set to 1 to project each dimension of 'z' to a different neurons cluster
+    selective_feedback = 0; % set to 1 to project each dimension of 'z' to a different neurons cluster
     
     % Target discretization and smoothing
-    n_slices = 20; % 0: mono-dimensional / otherwise discretize
-    smoothing = 1; % 0: don't smooth (use one-hot) / 1: apply smoothing
+    n_slices = 0; % 0: mono-dimensional / otherwise discretize
+    smoothing = 0; % 0: don't smooth (use one-hot) / 1: apply smoothing
     sigma_smoothing = 0.1; % standard deviation of gaussian filter
     
     %% frequency and phase of target signal
-    target_frequency = 5;
+    target_frequency = 12;
     target_phase = 0;
     fprintf("target frequency: %.2f\n", target_frequency);
     fprintf("target phase: %f\n", target_phase);
