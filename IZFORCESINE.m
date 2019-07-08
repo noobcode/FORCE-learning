@@ -4,6 +4,8 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     close all
     clc
     
+    plot_results = 1; % set to 1 to plot the results
+    
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
     
     %% Main experimental parameters
@@ -30,17 +32,19 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     smoothing = 0; % 0: don't smooth (use one-hot) / 1: apply smoothing
     sigma_smoothing = 0.1; % standard deviation of gaussian filter
     
-    %% frequency and phase of target signal
-    target_frequency = 12;
-    target_phase = 0;
-    fprintf("target frequency: %.2f\n", target_frequency);
-    fprintf("target phase: %f\n", target_phase);
+    % replay
+    BIAS_LOW = 900;     BIAS_HIGH = 1100;   pBiasHigh = 0.1;
+    replay = 0; % 0: ignore; 1: first run (training); 2: second run (replay)
     
+    %% frequency and phase of target signal
+    target_frequency = 5;       target_phase = 0;
+    fprintf("target frequency / phase: %.2f / %.2f \n", target_frequency, target_phase);
+
     %%
     load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
     training_setting = 0; % 0: time-based training
                           % 1: cycle-based training
-                          % 2: max(5 seconds, 20 cycles) training 
+                          % 2: max(5 seconds, 20 cycles) training
                           
     fprintf("training setting %d\n", training_setting);
     %% simulation timings (start/end training, total time)
@@ -68,9 +72,14 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         nt = icrit_2 + max(round(8000/dt), 10 * iteration_per_target_cycle);
     end 
     
-    fprintf("training starts at %d s\n", imin * dt/1000);
-    fprintf("training ends at %d s\n", icrit * dt/1000);
-    fprintf("simulation ends at %d s\n", nt * dt/1000);
+    if replay == 2
+        i_reinject_BIAS = round(3000/dt);
+        imin = inf; % no training, only simulate
+        icrit = 1; 
+        nt = i_reinject_BIAS + round(5000/dt);
+    end
+    
+    fprintf("train start / train end / simulation end: %d / %d / %d ms\n", imin*dt , icrit*dt, nt*dt);
       
     %% Izhikevich Parameters
     N =  2000;  % Number of neurons
@@ -89,7 +98,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     p = 0.1; % sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
     Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
-    %Q=0;          % set Q=0 to remove feedback term
+    %Q=0;       % set Q=0 to remove feedback term
        
     fprintf("Feedback term: %d\n", Q ~= 0);
     %% Storage variables for synapse integration  
@@ -197,6 +206,13 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         BIAS = BIAS + A_add_BIAS * (rand(N,1) < pBias);  % add constant bias to some neurons
     end
     
+    if replay == 1
+       BIAS = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
+    elseif replay == 2
+       BIAS = BIAS_LOW;
+       BIAS_replay = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
+    end
+    
     %% RLS parameters
     Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
     step = 20; % optimize with RLS only every 20 steps  
@@ -226,8 +242,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             - exhaustion_coeff * has_spiked); % activity descriptor of individual neuron 
         end
         
-        %% EULER INTEGRATE
-        % current
+        %% current
         I = IPSC + E*z + BIAS;    % postsynaptic current (PSC)
         
         if selective_feedback == 1
@@ -247,6 +262,12 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
             I = I + zx(i) .* input_target_coeff * (i > 1 & i < icrit_2); % PSC + target injection
         end
         
+        if replay == 2 && i > i_reinject_BIAS
+            % overwrite previous value of I
+            I = IPSC + E*z + BIAS_replay; 
+        end
+        
+        %% EULER INTEGRATE
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
         u = u + dt * (a*(b*(v_-vr) - u));                   % u(t) = u(t-1) + dt*u'(t-1).
@@ -334,7 +355,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         end
         
     end
-    % end simulation
+    fprintf("Simulation finished");
     
     %% filtering the reconstructed target
     tau_rec = 10/dt; % low-pass filter time constant
@@ -371,111 +392,20 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         fprintf("Average Error Stage-1: %f\n", AverageErrorStage1);
         fprintf("Average Error Stage-2: %f\n", AverageErrorStage2);
     end
-    %% Plotting neurons before and after learning
-    % "normalize" membrane potential,
-    % add 'j' to the membrane potential of neuron j so that the curves do not
-    % overlap
-%{
-    % post learning
-    figure(30)
-    for j = 1:1:5
-        plot((1:1:i)*dt/1000, REC(1:1:i,j)/(vpeak-vreset)+j), hold on 
-    end
-    xlim([nt-imin,nt]*dt/1000) % last 5 seconds
-    xlabel('Time (s)')
-    ylabel('Neuron Index') 
-    title('Post Learning')
-
-    % before learning
-    figure(31)
-    for j = 1:1:5
-        plot((1:1:i)*dt/1000, REC(1:1:i,j)/(vpeak-vreset)+j), hold on 
-    end
-    xlim([0,imin*dt/1000]) % from 0 to 5 seconds
-    xlabel('Time (s)')
-    ylabel('Neuron Index') 
-    title('Pre-Learning')
-
-    %% plot eigenvalues
-    figure(40)
-    Z = eig(OMEGA + E*BPhi'); % eigenvalues after learning 
-    Z2 = eig(OMEGA); % eigenvalues before learning 
-
-    plot(Z2,'r.'), hold on 
-    plot(Z,'k.') 
-    legend('Pre-Learning','Post-Learning')
-    xlabel('Re \lambda')
-    ylabel('Im \lambda')
-    title('Eigenvalues')
-    %%
-%}
-if seed == 10
-    % plot approximant and target
-    if k == 1
-        figure(2)
-        min_ = min(min(zx),min(current));
-        max_ = max(max(zx),max(current));
-        patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
-        hold on
-        plot(dt*(1:1:nt)/1000, zx,'k','LineWidth',2)
-        plot(dt*(1:1:nt)/1000, current,'b--','LineWidth',2)
-        xlabel('Time (s)')
-        ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
-        legend('Training', 'Target Signal', 'Approximant','Location', 'best')
-        xlim([0,nt*dt/1000]);
-        hold off
-    end
+    %% Graphs
+    if plot_results == 1
+        if k == 1
+            plot_approximant_vs_target(zx, current, dt, nt, imin, icrit);
+        end
             
-    % plot error
-    figure(5)
-    min_ = min(losses);
-    max_ = max(losses);
-    hold on
-    plot((1:1:nt)*dt/1000, losses, 'LineWidth',2)
-    patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
-    hold off
-    legend('Training', 'Error','Location', 'best')
-    xlabel('Time (s)')
-    ylabel('Error $e(t)$', 'Interpreter', 'LaTeX')
-    xlim([0,nt*dt/1000]);
-    set(gca, 'YScale', 'log')
-    title('Error curve')
-
-    % plot population activity
-    figure(14)
-    min_ = 0;
-    max_ = 100;
-    hold on
-    patch([imin icrit icrit imin]*dt/1000, [min_ min_ max_ max_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
-    plot(tspike(1:ns,2)/1000, tspike(1:ns,1),'k.')
-    xlabel('Time (s)')
-    ylabel('Neuron Index')
-    title('Raster plot')
-    ylim([0,100])
-    xlim([0,nt*dt/1000]);
-    
-    % plot general network activity
-    figure(4)
-    plot(dt*(1:1:nt)/1000, y(2:end), 'LineWidth', 2)
-    xlabel('Time (s)')
-    ylabel('$y(t)$','Interpreter','LaTeX')
-    title('General Network Activity')
-    xlim([0,nt*dt/1000]);
-    
-    % plot target reconstruction
-    figure(7)
-    min_ = min(min(original_zx), min(reconstructed_zx));
-    max_ = max(max(original_zx), max(reconstructed_zx));
-    hold on
-    patch([imin imin icrit icrit]*dt/1000, [min_ max_ max_ min_], [0.5,0.5,0.5], 'FaceAlpha', 0.4, 'EdgeColor', 'none')
-    plot(dt*(1:1:nt)/1000, original_zx,'k','LineWidth',2)
-    plot(dt*(1:1:nt)/1000, reconstructed_zx,'b--','LineWidth',2)
-    xlabel('Time (s)')
-    ylabel('$\hat{x}(t)$','Interpreter','LaTeX')
-    legend('Training', 'Target Signal', 'Reconstructed approximant','Location', 'best')
-    xlim([0,nt*dt/1000]);
-    hold off
-end  
+        plot_loss(losses, dt, nt, imin, icrit);
+        plot_raster(tspike, ns, dt, nt, imin, icrit);
+        %plot_general_network_activity(y, dt, nt);
+        %plot_target_vs_reconstruction(original_zx, reconstructed_zx, dt, nt, imin, icrit);
+        %plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
+        %plot_eigenvalues_pre_and_post_learning(OMEGA, E, BPhi);
+        %plot_decoders(RECB, dt, nt);
+    end  
 
 %{            
     % plot activity descriptor of neuron 1
@@ -484,13 +414,6 @@ end
     xlabel('Time (s)')
     ylabel('$y_{ad}(t)$','Interpreter','LaTeX')
     title('Activity Descriptor of neuron 1')
-           
-    % plot decoders
-    figure(3)
-    plot((1:1:nt)*dt/1000, RECB)
-    xlabel('Time (s)')
-    ylabel('Decoders $\phi(t)$', 'Interpreter', 'LaTeX')
-    title('Decoders')
 %}
 end
 
