@@ -1,8 +1,47 @@
-function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2, tspike] = IZFORCESINE(seed)
+function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2, tspike] = ...
+    IZFORCESINE(varargin)
+%{
+The function can be called in two ways:
+    1) IZFORCESINE
+    2) IZFORCESINE(seed, load_weights, training_setting, replay)
+    - seed -- seed for random generator
+    - load_weights -- true/false, load weights from file or initialize them randomly
+    - training_setting -- [0,3], define simulation intervals
+    - replay -- [0,2], replay experiment. 0: ignore,
+                                          1: first run
+                                          2: second run
+%} 
     %% Force Method with Izhikevich Network 
-    clearvars -except seed
-    close all
+    clearvars -except varargin seed load_weights training_setting replay
+    %close all
     clc
+    
+    if isempty(varargin)
+        seed = 1;
+        load_weights = false;
+        training_setting = 0;
+        replay = 0;
+    else
+        seed = varargin{1};
+        if length(varargin) > 1
+            load_weights = varargin{2};
+        end
+        if length(varargin) > 2
+           training_setting = varargin{3};
+        end
+        
+        if length(varargin) > 3
+            replay = varargin{4};
+        end
+    end
+    
+    
+    %if ~exist('seed', 'var')  
+    %    seed = 'shuffle'
+    %end
+    
+    %if ~exist('
+    
     
     plot_results = 1; % set to 1 to plot the results
     
@@ -12,7 +51,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     past_ms = 0;  % time-shift of the target (in ms) [keep it in 0-500]
     pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
 
-    bias_OMEGA = 0.0; 
+    bias_OMEGA = 0.0; % 0 for Nicola&Clopath
  
     % input distributed onto reservoir neurons with probability pInput
     constant_BIAS = 0; pBias = 0.1; A_add_BIAS = 100;
@@ -34,49 +73,32 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     
     % replay
     BIAS_LOW = 900;     BIAS_HIGH = 1100;   pBiasHigh = 0.1;
-    replay = 0; % 0: ignore; 1: first run (training); 2: second run (replay)
+    replay = replay; % 0: ignore; 1: first run (training); 2: second run (replay)
     
     %% frequency and phase of target signal
     target_frequency = 5;       target_phase = 0;
-    fprintf("target frequency / phase: %.2f / %.2f \n", target_frequency, target_phase);
+    fprintf("target frequency / phase: %.2f / %.2f\n", target_frequency, target_phase);
 
     %%
-    load_weights = 0; % 0: load weights from file / 1: initialize weights randomly
-    training_setting = 0; % 0: time-based training
+    load_weights = load_weights; % 0: load weights from file / 1: initialize weights randomly
+    training_setting = training_setting; % 0: Nicola&Clopath, time-based training
                           % 1: cycle-based training
                           % 2: max(5 seconds, 20 cycles) training
                           
-    fprintf("training setting %d\n", training_setting);
+    fprintf("training setting: %d\n", training_setting);
     %% simulation timings (start/end training, total time)
     dt = 0.04; % Integration time step in ms 
-    iteration_per_second = round(1000/dt); % number of loop iterations per second
-    iteration_per_target_cycle = round(iteration_per_second / target_frequency);
+    iterations_per_second = round(1000/dt); % number of loop iterations per second
+    iterations_per_target_cycle = round(iterations_per_second / target_frequency);
     
-    imin = round(5000/dt); % time before starting RLS, gets the network to chaotic attractor
+    [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iterations_per_target_cycle);
     
-    if training_setting == 0
-        % 5 sec stabilization, 5 sec training, 5 sec post-training
-        icrit = round(10000/dt); % end training at this time step
-        T = 15000; % Total time in ms % TODO: set to 5000 if you only want to see pre-learning activity
-        nt = round(T/dt); % Time steps
-    elseif training_setting == 1
-        % 5 sec stabilization, 20 target cycles training, 10 target cycles
-        % post-training
-        icrit = imin + 20 * iteration_per_target_cycle; % train for 20 cycles
-        nt = icrit + 10 * iteration_per_target_cycle; % evaluate for 10 cycles
-    elseif training_setting == 2
-        % 3 sec stabilization, max(5 sec, 20 cycles) training, stage1, stage2 
-        imin = round(3000/dt);
-        icrit = imin + max(round(5000/dt), 20 * iteration_per_target_cycle);
-        icrit_2 = icrit + max(round(5000/dt), 10 * iteration_per_target_cycle);
-        nt = icrit_2 + max(round(8000/dt), 10 * iteration_per_target_cycle);
-    end 
-    
+    % TODO: if non serve, sposta i_reingect_BIAS sopra, ma dt non definita.
     if replay == 2
         i_reinject_BIAS = round(3000/dt);
-        imin = inf; % no training, only simulate
-        icrit = 1; 
-        nt = i_reinject_BIAS + round(5000/dt);
+        %imin = inf; % no training, only simulate
+        %icrit = 1;  % evaluate from beginning
+        %nt = i_reinject_BIAS + round(7000/dt);
     end
     
     fprintf("train start / train end / simulation end: %d / %d / %d ms\n", imin*dt , icrit*dt, nt*dt);
@@ -100,18 +122,16 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA 
     %Q=0;       % set Q=0 to remove feedback term
        
-    fprintf("Feedback term: %d\n", Q ~= 0);
+    fprintf("Is there feedback: %d\n", Q ~= 0);
+    
     %% Storage variables for synapse integration  
     IPSC = zeros(N,1); % post synaptic current 
-    h = zeros(N,1); 
-    r = zeros(N,1);
-    hr = zeros(N,1);
-    JD = zeros(N,1);
+    h = zeros(N,1);     r = zeros(N,1);     hr = zeros(N,1);    JD = zeros(N,1);
 
-    %-----Initialization---------------------------------------------
+    %% Membrane potential initialization
     v = vr + (vpeak-vr) * rand(N,1); %initial distribution 
-    v_ = v; %These are just used for Euler integration, previous time step storage
-    rng(seed) % default seed was 1
+    v_ = v; % These are just used for Euler integration, previous time step storage
+    rng(seed) % 1 for Nicola & Clopath
     
     %% Target signal, discretization, smoothing, dimensionality
     original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
@@ -179,7 +199,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     %fprintf("train at phase percentage %.2f\n", phase_percentage);
     
      %% load weights omega, phi and eta or initialize them randomly
-    if load_weights == 1
+    if load_weights
         fprintf('loading old weights...');
         weights_file = load('weights.mat');
         OMEGA = weights_file.OMEGA;
@@ -355,7 +375,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
         end
         
     end
-    fprintf("Simulation finished");
+    fprintf("Simulation finished\n");
     
     %% filtering the reconstructed target
     tau_rec = 10/dt; % low-pass filter time constant
@@ -378,7 +398,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     AverageError = mean(errors_after_training);
     
     % Average Error in stage-1 and stage-2
-    if exist('icrit_2', 'var')
+    if icrit_2 ~= -1
         errors_stage1 = losses(icrit:icrit_2);
         errors_stage2 = losses(icrit_2:end);
         AverageErrorStage1 = mean(errors_stage1);
@@ -388,7 +408,7 @@ function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage
     fprintf("Average Firing Rate: %f\n", AverageFiringRate);
     fprintf("Average Error: %f\n", AverageError);
     
-    if exist('icrit_2', 'var')
+    if icrit_2 ~= -1
         fprintf("Average Error Stage-1: %f\n", AverageErrorStage1);
         fprintf("Average Error Stage-2: %f\n", AverageErrorStage2);
     end
