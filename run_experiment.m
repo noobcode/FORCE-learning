@@ -9,7 +9,7 @@ ErrorsStage1 = zeros(trials, 1);
 ErrorsStage2 = zeros(trials, 1);
 
 for i=1:1:trials
-    [avgFR, avgE, avgES1, avgES2] = IZFORCESINE(i);
+    [avgFR, avgE, avgES1, avgES2, ~] = IZFORCESINE(i, false, 0, 0);
     FiringRates(i) = avgFR;
     Errors(i) = avgE;
     ErrorsStage1(i) = avgES1;

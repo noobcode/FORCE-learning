@@ -1,8 +1,8 @@
-seed_1 = 1; % seed of first run
-seed_2 = 2; % seed of second run
+seed_1 = 3; % seed of first run
+seed_2 = 10; % seed of second run
 
-load_weights_1 = 0; % initialize weights randomly in the first run
-load_weights_2 = 1; % load weights in the second run
+load_weights_1 = false; % initialize weights randomly in the first run
+load_weights_2 = true; % load weights in the second run
 
 training_setting_1 = 0; % Nicola & Clopath in the first run
 training_setting_2 = 3; % only evaluate in the second run

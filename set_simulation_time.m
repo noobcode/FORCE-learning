@@ -12,9 +12,9 @@ function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, 
         %% Nicola & Clopath.
         % 5 sec pre-training, 5 sec training, 5 sec post-training
         imin = round(5000/dt);
-        icrit = round(10000/dt);    icrit_2 = -1; % dummy value
-        T = 15000;
-        nt = round(T/dt);
+        icrit = round(10000/dt); %round(10000/dt);    
+        icrit_2 = -1; % dummy value
+        nt = icrit  + round(5000/dt);
     elseif training_setting == 1
         %% Train for certain number of cycles of the target signal.
         % 5 sec pre-training, 20 target cycles training, 10 target cycles post-training

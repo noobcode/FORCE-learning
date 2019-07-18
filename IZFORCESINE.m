@@ -12,10 +12,11 @@ The function can be called in two ways:
                                           2: second run
 %} 
     %% Force Method with Izhikevich Network 
-    clearvars -except varargin seed load_weights training_setting replay
+    clearvars -except varargin
     %close all
     clc
     
+    % TODO: move into a separate function
     if isempty(varargin)
         seed = 1;
         load_weights = false;
@@ -34,15 +35,7 @@ The function can be called in two ways:
             replay = varargin{4};
         end
     end
-    
-    
-    %if ~exist('seed', 'var')  
-    %    seed = 'shuffle'
-    %end
-    
-    %if ~exist('
-    
-    
+
     plot_results = 1; % set to 1 to plot the results
     
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
@@ -76,7 +69,7 @@ The function can be called in two ways:
     replay = replay; % 0: ignore; 1: first run (training); 2: second run (replay)
     
     %% frequency and phase of target signal
-    target_frequency = 5;       target_phase = 0;
+    target_frequency = 1;       target_phase = 0;
     fprintf("target frequency / phase: %.2f / %.2f\n", target_frequency, target_phase);
 
     %%
@@ -93,22 +86,19 @@ The function can be called in two ways:
     
     [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iterations_per_target_cycle);
     
-    % TODO: if non serve, sposta i_reingect_BIAS sopra, ma dt non definita.
+    % TODO: put i_reingect_BIAS above, but dt not defined...
     if replay == 2
         i_reinject_BIAS = round(3000/dt);
-        %imin = inf; % no training, only simulate
-        %icrit = 1;  % evaluate from beginning
-        %nt = i_reinject_BIAS + round(7000/dt);
     end
     
     fprintf("train start / train end / simulation end: %d / %d / %d ms\n", imin*dt , icrit*dt, nt*dt);
       
     %% Izhikevich Parameters
-    N =  2000;  % Number of neurons
+    N = 2000;  % Number of neurons
     a = 0.01; %adaptation reciprocal time constant
     b = -2;  %resonance parameter 
     vreset = -65; % reset voltage 
-    d = 200;   %adaptation jump current 
+    d = -50;%200;   %adaptation jump current 
     C = 250;  %capacitance 
     vr = -60;   %resting membrane
     ff = 2.5;  %k parameter for Izhikevich, gain on v
@@ -129,9 +119,9 @@ The function can be called in two ways:
     h = zeros(N,1);     r = zeros(N,1);     hr = zeros(N,1);    JD = zeros(N,1);
 
     %% Membrane potential initialization
+    rng(seed) % 1 for Nicola & Clopath
     v = vr + (vpeak-vr) * rand(N,1); %initial distribution 
     v_ = v; % These are just used for Euler integration, previous time step storage
-    rng(seed) % 1 for Nicola & Clopath
     
     %% Target signal, discretization, smoothing, dimensionality
     original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
@@ -208,16 +198,13 @@ The function can be called in two ways:
     else
         fprintf('initializing weights...');
         OMEGA = G * (bias_OMEGA + randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
-        % bias_OMEGA is zero in Nicola & Clopath
         BPhi = zeros(N,k); %initial decoder.  Best to keep it at 0.
         E = (2*rand(N,k)-1)*Q .* (rand(N,k) < pEta); % Weight matrix is OMEGA0 + E*BPhi';
-        % set pEta to 1 to obtain standard Nicola & Clopath
-        %E = rand(N,k)*Q .* (rand(N,k) < pEta);
     end
     fprintf("done.\n")
     %% Some more initializations
     z = zeros(k,1);  % initial approximant
-    tspike = zeros(5*nt,2);  % store spike times, 
+    tspike = zeros(10*nt,2);  % store spike times, 
     ns = 0; % count cumulative total number of spikes
     ns_t = 0; % number of spikes at time t
     BIAS = 1000; % Bias current. The Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
@@ -227,10 +214,12 @@ The function can be called in two ways:
     end
     
     if replay == 1
-       BIAS = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
+        % first run
+        BIAS = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
     elseif replay == 2
-       BIAS = BIAS_LOW;
-       BIAS_replay = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
+        % second run
+        BIAS = BIAS_LOW;
+        BIAS_replay = bias_replay(N, BIAS_LOW, BIAS_HIGH, pBiasHigh);
     end
     
     %% RLS parameters
@@ -285,6 +274,16 @@ The function can be called in two ways:
         if replay == 2 && i > i_reinject_BIAS
             % overwrite previous value of I
             I = IPSC + E*z + BIAS_replay; 
+        end
+        
+        if i == icrit+round(2000/dt)
+           fprintf("increase d");
+           d = d + abs(d)*0.2; 
+        end
+        
+        if i == icrit+round(3000/dt)
+            fprintf("decrease d");
+            d = -50;
         end
         
         %% EULER INTEGRATE
@@ -422,9 +421,10 @@ The function can be called in two ways:
         plot_raster(tspike, ns, dt, nt, imin, icrit);
         %plot_general_network_activity(y, dt, nt);
         %plot_target_vs_reconstruction(original_zx, reconstructed_zx, dt, nt, imin, icrit);
-        %plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
+        plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
         %plot_eigenvalues_pre_and_post_learning(OMEGA, E, BPhi);
         %plot_decoders(RECB, dt, nt);
+        plot_phase_portait_pre_and_post_training(REC, imin, icrit);
     end  
 
 %{            
