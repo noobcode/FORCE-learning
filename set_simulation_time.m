@@ -35,5 +35,14 @@ function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, 
         icrit_2 = -1;
         T = 10000;
         nt = round(T/dt);
+        
+    elseif training_setting == 4
+        %% try to control the frequency of replay
+        % at icrit_2 change a parameter, then monitor how the output is
+        % influenced
+        imin = round(5000/dt);
+        icrit = round(10000/dt);
+        icrit_2 = icrit + round(5000/dt);
+        nt = icrit_2 + round(120000/dt);
     end 
 end

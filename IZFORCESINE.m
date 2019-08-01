@@ -1,4 +1,4 @@
-function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2, tspike] = ...
+function [AverageFiringRate, AverageError, AverageErrorStage1, AverageErrorStage2, tspike, current] = ...
     IZFORCESINE(varargin)
 %{
 The function can be called in two ways:
@@ -80,7 +80,7 @@ The function can be called in two ways:
                           
     fprintf("training setting: %d\n", training_setting);
     %% simulation timings (start/end training, total time)
-    dt = 0.04; % Integration time step in ms 
+    dt = 0.2; %0.04; % Integration time step in ms 
     iterations_per_second = round(1000/dt); % number of loop iterations per second
     iterations_per_target_cycle = round(iterations_per_second / target_frequency);
     
@@ -91,14 +91,14 @@ The function can be called in two ways:
         i_reinject_BIAS = round(3000/dt);
     end
     
-    fprintf("train start / train end / simulation end: %d / %d / %d ms\n", imin*dt , icrit*dt, nt*dt);
+    fprintf("train start / train end / icrit2 / simulation end: %d / %d / %d / %d ms\n", imin*dt , icrit*dt, icrit_2*dt, nt*dt);
       
     %% Izhikevich Parameters
-    N = 2000;  % Number of neurons
+    N = 100;%2000;  % Number of neurons
     a = 0.01; %adaptation reciprocal time constant
     b = -2;  %resonance parameter 
     vreset = -65; % reset voltage 
-    d = -50;%200;   %adaptation jump current 
+    d = -50;   %adaptation jump current 
     C = 250;  %capacitance 
     vr = -60;   %resting membrane
     ff = 2.5;  %k parameter for Izhikevich, gain on v
@@ -204,7 +204,7 @@ The function can be called in two ways:
     fprintf("done.\n")
     %% Some more initializations
     z = zeros(k,1);  % initial approximant
-    tspike = zeros(10*nt,2);  % store spike times, 
+    tspike = zeros(20*nt,2);  % store spike times, 
     ns = 0; % count cumulative total number of spikes
     ns_t = 0; % number of spikes at time t
     BIAS = 1000; % Bias current. The Rheobase is around 950 or something.  I forget the exact formula for this but you can test it out by shutting weights and feeding co tant currents to neurons  
@@ -276,16 +276,6 @@ The function can be called in two ways:
             I = IPSC + E*z + BIAS_replay; 
         end
         
-        if i == icrit+round(2000/dt)
-           fprintf("increase d");
-           d = d + abs(d)*0.2; 
-        end
-        
-        if i == icrit+round(3000/dt)
-            fprintf("decrease d");
-            d = -50;
-        end
-        
         %% EULER INTEGRATE
         % the v_ term makes it so that the integration of u uses v(t-1), instead of the updated v(t)
         v = v + dt * ((ff .* (v-vr) .* (v-vt) - u + I))/C ; % v(t) = v(t-1) + dt*v'(t-1)
@@ -347,7 +337,7 @@ The function can be called in two ways:
             end 
         end
 
-        %% End iteration...store and reset.
+        %% End iteration...reset.         
         % if spike occurred, reset variables
         u = u + d*(v>=vpeak);  %implements set u to u+d if v>vpeak, component by component. 
         v = v + (vreset-v).*(v>=vpeak); %implements v = c if v>vpeak add 0 if false, add c-v if true, v+c-v = c
@@ -371,6 +361,31 @@ The function can be called in two ways:
         else
             % sum of squared errors
             losses(i) = sum(err.^2);
+        end
+        
+        %% control frequency
+        if training_setting == 4 && i >= icrit_2
+            if mod(i, round(10000/dt)) == 1
+                %a = a + 0.005
+                %a = a - 0.00025
+                %a = a + 0.005*(i < icrit_2 + round(60000/dt)) - 0.005*(i > icrit_2 + round(60000/dt))
+                
+                %a = a + a*0.25
+                %a = a - a*0.05
+                %a = a + a*0.25*(i < icrit_2 + round(60000/dt)) - a*0.25*(i > icrit_2 + round(60000/dt))
+                
+                %d = d + 20*(i < icrit_2 + round(60000/dt)) - 20*(i > icrit_2 + round(60000/dt))
+                %d = d + 20
+                d = d - 5
+                
+                %d = d + abs(d)*0.25
+                %d = d - abs(d)*0.05
+                %d = d + d*0.25*(i < icrit_2 + round(60000/dt)) - d*0.25*(i > icrit_2 + round(60000/dt))
+                
+                %BPhi = BPhi*1.05
+            end
+           %b = 0.5 * b
+           %d = 2 * d
         end
         
     end
@@ -414,17 +429,19 @@ The function can be called in two ways:
     %% Graphs
     if plot_results == 1
         if k == 1
-            plot_approximant_vs_target(zx, current, dt, nt, imin, icrit);
+            plot_approximant_vs_target(zx, current, dt, nt, imin, icrit, icrit_2);
+            plot_approximant(current, dt, nt, imin, icrit, icrit_2)
         end
             
-        plot_loss(losses, dt, nt, imin, icrit);
+        %plot_loss(losses, dt, nt, imin, icrit);
         plot_raster(tspike, ns, dt, nt, imin, icrit);
         %plot_general_network_activity(y, dt, nt);
         %plot_target_vs_reconstruction(original_zx, reconstructed_zx, dt, nt, imin, icrit);
-        plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
+        %plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
         %plot_eigenvalues_pre_and_post_learning(OMEGA, E, BPhi);
         %plot_decoders(RECB, dt, nt);
-        plot_phase_portait_pre_and_post_training(REC, imin, icrit);
+        %plot_phase_portait_pre_and_post_training(REC, dt, imin, icrit, nt);
+        plot_spectrogram(current, dt)
     end  
 
 %{            
