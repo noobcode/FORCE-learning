@@ -1,4 +1,4 @@
-function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iteration_per_target_cycle)
+function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iteration_per_target_cycle, target_length)
     %% define simulation intervals
     % [0, imin] -- time before starting RLS, gets the network to chaotic attractor
     % (imin, icrit) -- training interval
@@ -44,5 +44,13 @@ function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, 
         icrit = round(10000/dt);
         icrit_2 = icrit + round(5000/dt);
         nt = icrit_2 + round(120000/dt);
+    elseif training_setting == 5
+        %% Using HDTS
+        imin = round(target_length/dt); % start training at beginning of signal
+        icrit = imin + 3*imin; % train for X repetitions of the target signal
+        icrit_2 = icrit + 2*imin; % repeat signal Y times after training
+        nt = icrit_2 + 4*imin; % repeat signal after post control
     end 
+    
+    fprintf("training_setting: %d\n", training_setting);
 end
