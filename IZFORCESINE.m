@@ -112,7 +112,7 @@ The function can be called in two ways:
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
     Q = 4*10^2;%5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA. Set Q=0 to remove feedback term
     WE2 = 4*10^3;
-     
+
     %% Storage variables for synapse integration  
     IPSC = zeros(N,1); % post synaptic current 
     h = zeros(N,1);     r = zeros(N,1);     hr = zeros(N,1);    JD = zeros(N,1);
@@ -129,9 +129,15 @@ The function can be called in two ways:
     %original_zx = sqrt((tt)) - 0.5 * (tt);
     %original_zx = sqrt(tt) - 0.5 * (tt).^2 +  0.2 * (tt).^3;
     %original_zx = (sin(2*pi*target_frequency*(1:1:nt)*dt/1000 + target_phase));
-    original_zx = tt.^2 - sqrt(tt);
+    %original_zx = tt.^2 - sqrt(tt);
     %original_zx = 1./exp(-tt) - tt.^3;
     %si=3; mu=1; original_zx = 1/(si*sqrt(2*pi)) * exp(- 0.5 * ((tt-mu)/si).^2);
+    
+    
+    % comment / uncomment
+    target_length_1 = 1000; target_length_2 = 1000; % ms, length of target signals
+    original_zx = two_target(target_length_1, target_length_2, dt);
+    
     
     %original_zx = original_zx/(max(max(original_zx)));  original_zx(isnan(original_zx) == 1) = 0;
     
@@ -142,16 +148,18 @@ The function can be called in two ways:
         [zx, bin_edges, bin_centers] = discretize_and_smooth(original_zx, n_slices, smoothing, sigma_smoothing);
     end
  
-    dims_zx = size(zx);
-    k = dims_zx(1); % target signal dimensionality
+    dims_zx = size(zx);     k = dims_zx(1); % target signal dimensionality
     
     fprintf("target dimension: %d\n", k);
     
     %% generate HDTS
     m = 32; % number of upstates of the HDTS
-    compression = 0.5; % post-training speedup of the replay. > 1 accelerate, < 1 decelerate
-    [hdts, hdts_post] = generate_HDTS(m, target_length, compression, dt);
+    compression = 2; % post-training speedup of the replay. > 1 accelerate, < 1 decelerate
+    hdts = generate_HDTS(m, target_length, 1, dt);
+    hdts_post = generate_HDTS(m, target_length, compression, dt);
     dims_hdts_post = size(hdts_post);
+
+    hdts_train = two_HDTS(m, target_length_1, target_length_2 , dt);
 
     %% Reinjected target signal parameters
     input_target_amplitude = A_it; % amplitude of reinjected target signal
@@ -295,10 +303,21 @@ The function can be called in two ways:
             I = IPSC + E*z + BIAS_replay; 
         end
         
-        if high_dimensional_temporal_signal == 1 && training_setting == 5
-            % HDTS
-            %I = I + E2*hdts(:,qq)*(i < icrit_2) + E2*hdts_post(:,qq_post)*(i >= icrit_2);
-            I = I + E2*hdts(:,qq)*(i < icrit_2 || i > icrit_2 + 2*round(target_length/dt));
+        if high_dimensional_temporal_signal == 1
+            if training_setting == 5
+                % HDTS, compress
+                %I = I + E2*hdts(:,qq)*(i < icrit_2) + E2*hdts_post(:,qq_post)*(i >= icrit_2);
+            
+                % HDTS, trigger replay
+                I = I + E2*hdts(:,qq)*(i < icrit_2 || i > icrit_2 + 2*round(target_length/dt));
+                %if i >= round(6000/dt) && i <= round(8000/dt)  BIAS = 0; else BIAS = 1000; end
+            end
+            if training_setting == 6
+                % HDTS, change activity
+                I = I + E2*hdts_train(:,i);
+                %if i >= round(5000/dt) && i <= round(7000/dt)   BIAS = 0; else BIAS = 1000; end
+                %if i >= round(10000/dt) && i <= round(12000/dt)   BIAS = 0; else BIAS = 1000; end
+            end
         end
         
         %% EULER INTEGRATE
@@ -351,8 +370,7 @@ The function can be called in two ways:
         %    err = zeros(k,1);
         %end
 
-        % TODO: use modulo
-        if qq >= dims_zx(2)  qq = 1;    end
+        if qq      >= dims_zx(2)         qq = 1;      end
         if qq_post >= dims_hdts_post(2)  qq_post = 1; end
         
         err = z - zx(:, qq);
@@ -475,10 +493,13 @@ The function can be called in two ways:
         %plot_phase_portait_pre_and_post_training(REC, dt, imin, icrit, nt);
         plot_spectrogram(current, dt)
         
+        %{
         figure;
         plot(tt, zx)
         xlabel('Time (s)')
         title('supervisor')
+        %}
+        
     end  
 
 %{            

@@ -19,9 +19,6 @@ function plot_approximant_vs_target(zx, current, dt, nt, imin, icrit, icrit_2)
         end
     end
     
-    size(zx)
-    nt
-    
     plot(dt*(1:1:nt)/1000, zx,'k','LineWidth',2)
     plot(dt*(1:1:nt)/1000, current,'b--','LineWidth',2)
     xlabel('Time (s)')
