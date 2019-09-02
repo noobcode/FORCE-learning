@@ -95,7 +95,7 @@ The function can be called in two ways:
     fprintf("train start / train end / icrit2 / simulation end: %d / %d / %d / %d ms\n", imin*dt , icrit*dt, icrit_2*dt, nt*dt);
       
     %% Izhikevich Parameters
-    N = 1000; %2000 % Number of neurons
+    N = 4000;%1000; %2000 % Number of neurons
     a = 0.002; %0.01; %adaptation reciprocal time constant  (0.01 IZFORCESINE)
     b = 0;%-2;  %resonance parameter (-2 IZFORCESICE)
     vreset = -65; % reset voltage 

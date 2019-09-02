@@ -26,10 +26,32 @@ function hdts_train = two_HDTS(m, length_signal_1, length_signal_2, dt)
                             .* (tt2 > (qw-1)*T2/m);
     end
     
-    % try swap
+    %% third HDTS sample
+    % triangular pulse
+    x = sawtooth(2*pi*m*tt2/T2, 0.5);
+    temp3 = (x - min(x)) / ( max(x) - min(x) );
+    
+    for qw = 1:1:m
+        hdts3(qw,:) = temp3 .* (tt2 < qw*T2/m) ...
+                            .* (tt2 > (qw-1)*T2/m);
+    end
+    
+    %% fourth HDTS sample
+    % different triangular pulse
+    x = sawtooth(2*pi*m*tt2/T2);
+    temp4 = (x - min(x)) / ( max(x) - min(x) );
+    
+    for qw = 1:1:m
+        hdts4(qw,:) = temp4 .* (tt2 < qw*T2/m) ...
+                            .* (tt2 > (qw-1)*T2/m);
+    end
+    
+    %% try swap
     %tmp = hdts;     hdts = hdts2;   hdts2 = tmp;
+    
     % try combination
     hdts_comb = 0.5 * hdts + 0.5 * hdts2;
+    
     %% construct HDTS train
     imin = round(1000/dt);
     
@@ -61,8 +83,50 @@ function hdts_train = two_HDTS(m, length_signal_1, length_signal_2, dt)
     hdts_train = [hdts_train, hdts];
     hdts_train = [hdts_train, hdts];
     hdts_train = [hdts_train, hdts];
+    % post training
     hdts_train = [hdts_train, flip(hdts,2)];
     hdts_train = [hdts_train, flip(hdts,2)];
+    
+    %% two target one HDTS (!!! overwrite hdts_train !!!)
+    % pre-training
+    hdts_train = zeros(m, imin);
+    % during training
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    % post training
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    hdts_train = [hdts_train, hdts];
+    
+    %% four HDTS interpolation
+    
+    hdts_12 = 0.5*hdts + 0.5*hdts2;
+    hdts_13 = 0.5*hdts + 0.5*hdts3;
+    hdts_23 = 0.5*hdts2 + 0.5*hdts3;
+    hdts_123 = 0.34*hdts + 0.33*hdts2 + 0.33*hdts3;
+    hdts_1234 = 0.25*hdts + 0.25*hdts2 + 0.25*hdts3 + 0.25*hdts4;
+    
+    % pre-training
+    hdts_train = zeros(m, imin);
+    % during training
+    hdts_train = [hdts_train, hdts, hdts2, hdts3];
+    hdts_train = [hdts_train, hdts, hdts2, hdts3];
+    %hdts_train = [hdts_train, hdts4];
+    % post training
+    hdts_train = [hdts_train, hdts, hdts2, hdts3];
+    hdts_train = [hdts_train, zeros(m, imin), hdts_12, hdts_12];
+    hdts_train = [hdts_train, zeros(m, imin), hdts_13, hdts_13];
+    hdts_train = [hdts_train, zeros(m, imin), hdts_23, hdts_23];
+    hdts_train = [hdts_train, zeros(m, imin), hdts_123, hdts_123];
+    
+    %hdts_train = [hdts_train, hdts_12, hdts_12, hdts_12, hdts_12, hdts_12, hdts_12];
+    
+    %hdts_train = [hdts_train, hdts_123, hdts_123];
+    %hdts_train = [hdts_train, hdts_1234, hdts_1234];
+    
     %% plot the two HDTS sample 
     figure;
     plot(tt1, hdts);

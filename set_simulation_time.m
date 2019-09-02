@@ -53,10 +53,10 @@ function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, 
     elseif training_setting == 6
         %% HDTS train with 2 targets
         imin = round(1000/dt);
-        icrit = imin + 3*round(target_length/dt); % 3/4
-        icrit_2 = -1;
+        icrit = imin + 6*round(target_length/dt); % 3/4
+        icrit_2 = icrit + 3*round(target_length/dt); %-1;
         %nt = icrit + round(4000/dt) + 6*round(target_length/dt); % 4/2000, 6/3*
-        nt = icrit + round(3000/dt); % for inverse replay
+        nt = icrit + round(15000/dt); % for inverse replay 3; for two HDTS one target 4;
     end 
     
     fprintf("training_setting: %d\n", training_setting);
