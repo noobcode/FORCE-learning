@@ -3,7 +3,7 @@ weights.mat
 Images/
 Data/forNRP/
 Data/syntheticData/
-
+*.gz
 *.m~
 IZFORCESINE_mod2.m
 
