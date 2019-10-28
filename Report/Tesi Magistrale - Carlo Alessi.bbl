@@ -1,0 +1,67 @@
+\begin{thebibliography}{10}
+
+\bibitem{aggarwal2014use}
+Luv Aggarwal, Kush Aggarwal, and Ruth~Jill Urbanic.
+\newblock Use of artificial neural networks for the development of an inverse
+  kinematic solution and visual identification of singularity zone (s).
+\newblock {\em Procedia Cirp}, 17:812--817, 2014.
+
+\bibitem{asabuki2018interactive}
+Toshitake Asabuki, Naoki Hiratani, and Tomoki Fukai.
+\newblock Interactive reservoir computing for chunking information streams.
+\newblock {\em PLoS computational biology}, 14(10):e1006400, 2018.
+
+\bibitem{bouganis2010training}
+Alexandros Bouganis and Murray Shanahan.
+\newblock Training a spiking neural network to control a 4-dof robotic arm
+  based on spike timing-dependent plasticity.
+\newblock In {\em The 2010 International Joint Conference on Neural Networks
+  (IJCNN)}, pages 1--8. IEEE, 2010.
+
+\bibitem{duka2014neural}
+Adrian-Vasile Duka.
+\newblock Neural network based inverse kinematics solution for trajectory
+  tracking of a robotic arm.
+\newblock {\em Procedia Technology}, 12:20--27, 2014.
+
+\bibitem{dur2012network}
+Muhammad Dur-e Ahmad, Wilten Nicola, Sue~Ann Campbell, and Frances~K Skinner.
+\newblock Network bursting using experimentally constrained single compartment
+  ca3 hippocampal neuron models with adaptation.
+\newblock {\em Journal of computational neuroscience}, 33(1):21--40, 2012.
+
+\bibitem{goudar2018encoding}
+Vishwa Goudar and Dean~V Buonomano.
+\newblock Encoding sensory and motor patterns as time-invariant trajectories in
+  recurrent neural networks.
+\newblock {\em Elife}, 7:e31134, 2018.
+
+\bibitem{hoerzer2012emergence}
+Gregor~M Hoerzer, Robert Legenstein, and Wolfgang Maass.
+\newblock Emergence of complex computational structures from chaotic neural
+  networks through reward-modulated hebbian learning.
+\newblock {\em Cerebral cortex}, 24(3):677--690, 2012.
+
+\bibitem{izhikevich2003simple}
+Eugene~M Izhikevich.
+\newblock Simple model of spiking neurons.
+\newblock {\em IEEE Transactions on neural networks}, 14(6):1569--1572, 2003.
+
+\bibitem{nicola2017supervised}
+Wilten Nicola and Claudia Clopath.
+\newblock Supervised learning in spiking neural networks with force training.
+\newblock {\em Nature communications}, 8(1):2208, 2017.
+
+\bibitem{sussillo2009generating}
+David Sussillo and Larry~F Abbott.
+\newblock Generating coherent patterns of activity from chaotic neural
+  networks.
+\newblock {\em Neuron}, 63(4):544--557, 2009.
+
+\bibitem{villani2018survey}
+Valeria Villani, Fabio Pini, Francesco Leali, and Cristian Secchi.
+\newblock Survey on human--robot collaboration in industrial settings: Safety,
+  intuitive interfaces and applications.
+\newblock {\em Mechatronics}, 55:248--266, 2018.
+
+\end{thebibliography}

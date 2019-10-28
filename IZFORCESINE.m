@@ -13,7 +13,7 @@ The function can be called in two ways:
 %} 
     %% Force Method with Izhikevich Network 
     clearvars -except varargin
-    %close all
+    close all
     clc
     
     % TODO: move into a separate function
@@ -41,6 +41,8 @@ The function can be called in two ways:
     AverageErrorStage1 = -1; AverageErrorStage2 = -1; % empty variables 
     
     %% Main experimental parameters
+    dt = 0.04; %0.2, 0.04; % Integration time step in ms (0.04)
+    
     past_ms = 0;  % time-shift of the target (in ms) [keep it in 0-500]
     pEta = 1; % probability of a reservoir neuron to receive feedback from the readout.
 
@@ -73,6 +75,12 @@ The function can be called in two ways:
     target_frequency = 1;       target_phase = 0;   target_length = 1000; % in milliseconds
     fprintf("target frequency / phase: %.2f / %.2f\n", target_frequency, target_phase);
 
+    %% load trajectories
+    % overwrites target_length
+    %[original_zx, ~,~, target_length] = load_trajectory('trajectory_4.csv', dt, false);
+    
+    %[original_zx, hdts_train, target_length] = trajectory_train(32, dt); % train
+    [original_zx, hdts_train, target_length] = trajectory_combination_train(32, dt);
     %%
     load_weights = load_weights; % 0: load weights from file / 1: initialize weights randomly
     training_setting = training_setting; % 0: Nicola&Clopath, time-based training
@@ -81,7 +89,6 @@ The function can be called in two ways:
                           
     %fprintf("training setting: %d\n", training_setting);
     %% simulation timings (start/end training, total time)
-    dt = 0.04;%0.2; %0.04; % Integration time step in ms 
     iterations_per_second = round(1000/dt); % number of loop iterations per second
     iterations_per_target_cycle = round(iterations_per_second / target_frequency);
     
@@ -95,24 +102,31 @@ The function can be called in two ways:
     fprintf("train start / train end / icrit2 / simulation end: %d / %d / %d / %d ms\n", imin*dt , icrit*dt, icrit_2*dt, nt*dt);
       
     %% Izhikevich Parameters
-    N = 4000;%1000; %2000 % Number of neurons
-    a = 0.002; %0.01; %adaptation reciprocal time constant  (0.01 IZFORCESINE)
-    b = 0;%-2;  %resonance parameter (-2 IZFORCESICE)
+    N = 1000; %2000 % Number of neurons
+    a = 0.01; % adaptation reciprocal time constant  (0.01 IZFORCESINE)
+    b = -2; % resonance parameter (-2 IZFORCESICE)
     vreset = -65; % reset voltage 
-    d = 0;%100;   %adaptation jump current (200 IZFORCESINE)
+    d = 0;   %adaptation jump current (200 IZFORCESINE) (0 or negative for low-frequency signals)
     C = 250;  %capacitance 
     vr = -60;   %resting membrane
     ff = 2.5;  %k parameter for Izhikevich, gain on v
     vpeak = 30;  % peak voltage
-    vt = -40; %vr + 40 - (b/ff); %threshold (vr + 40 - (b/ff) IZFORCESINE)
+    vt = vr + 40 - (b/ff); %threshold (vr + 40 - (b/ff) IZFORCESINE)
     u = zeros(N,1);  %initialize adaptation 
     tr = 2;  %synaptic rise time 
     td = 20; %decay time 
     p = 0.1; % sparsity
     G = 5*10^3; %Gain on the static matrix with 1/sqrt(N) scaling weights.  Note that the units of this have to be in pA. 
-    Q = 4*10^2;%5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA. Set Q=0 to remove feedback term
+    Q = 5*10^3; %Gain on the rank-k perturbation modified by RLS.  Note that the units of this have to be in pA. Set Q=0 to remove feedback term
     WE2 = 4*10^3;
-
+    
+    if high_dimensional_temporal_signal
+       a = 0.002;
+       b = 0;
+       vt = -40;
+       Q = 4 * 10^2;
+    end
+        
     %% Storage variables for synapse integration  
     IPSC = zeros(N,1); % post synaptic current 
     h = zeros(N,1);     r = zeros(N,1);     hr = zeros(N,1);    JD = zeros(N,1);
@@ -123,7 +137,7 @@ The function can be called in two ways:
     v_ = v; % These are just used for Euler integration, previous time step storage
     
     %% Target signal, discretization, smoothing, dimensionality
-    tt = (1:1:target_length/dt)*dt/1000; % x-axis of target signal
+    tt = (1:1:target_length/dt)*dt; % x-axis of target signal
     
     %original_zx = sin(2*pi*target_frequency*tt + target_phase);
     %original_zx = sqrt((tt)) - 0.5 * (tt);
@@ -133,16 +147,17 @@ The function can be called in two ways:
     %original_zx = 1./exp(-tt) - tt.^3;
     %si=3; mu=1; original_zx = 1/(si*sqrt(2*pi)) * exp(- 0.5 * ((tt-mu)/si).^2);
     
-    
     % comment / uncomment
+    %{
     target_length_1 = 1000; target_length_2 = 1000; % ms, length of target signals
     original_zx = two_target(target_length_1, target_length_2, dt);
-    
+    %}
     
     %original_zx = original_zx/(max(max(original_zx)));  original_zx(isnan(original_zx) == 1) = 0;
     
     zx = original_zx;
-    reconstructed_zx = zeros(size(original_zx));
+    %plot(tt, zx)
+    %reconstructed_zx = zeros(size(original_zx));
     
     if n_slices > 0
         [zx, bin_edges, bin_centers] = discretize_and_smooth(original_zx, n_slices, smoothing, sigma_smoothing);
@@ -151,16 +166,20 @@ The function can be called in two ways:
     dims_zx = size(zx);     k = dims_zx(1); % target signal dimensionality
     
     fprintf("target dimension: %d\n", k);
-    
     %% generate HDTS
     m = 32; % number of upstates of the HDTS
     compression = 2; % post-training speedup of the replay. > 1 accelerate, < 1 decelerate
-    hdts = generate_HDTS(m, target_length, 1, dt);
-    hdts_post = generate_HDTS(m, target_length, compression, dt);
+    
+    hdts = generate_HDTS(m, target_length(1), 1, dt);
+    
+    hdts_post = generate_HDTS(m, target_length(1), 0.5, dt);
+    hdts_post2 = generate_HDTS(m, target_length(1), compression, dt);
+    
     dims_hdts_post = size(hdts_post);
-
-    hdts_train = two_HDTS(m, target_length_1, target_length_2 , dt);
-
+    dims_hdts_post2 = size(hdts_post2);
+    
+    %hdts_train = two_HDTS(m, target_length_1, target_length_2 , dt);
+    
     %% Reinjected target signal parameters
     input_target_amplitude = A_it; % amplitude of reinjected target signal
     input_target_recipients = (rand(N,1) < pInput);
@@ -220,6 +239,7 @@ The function can be called in two ways:
         OMEGA = weights_file.OMEGA;
         BPhi = weights_file.BPhi;
         E = weights_file.E;
+        E2 = weights_file.E2;
     else
         fprintf('initializing weights...');
         OMEGA = G * (bias_OMEGA + randn(N,N)) .* (rand(N,N) < p) * sigma; % static weight matrix.
@@ -249,15 +269,16 @@ The function can be called in two ways:
     end
     
     %% RLS parameters
-    Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well 
+    Pinv = 2*eye(N); %initial correlation matrix, coefficient is the regularization constant as well (2)
     step = 20; % optimize with RLS only every 20 steps  
-    current = zeros(nt,k);  %store the approximant 
+    current = zeros(k,nt);  %store the approximant 
     RECB = zeros(nt,5); %store the decoders 
     REC = zeros(nt,10); %Store voltage and adaptation variables for plotting
     RECy_ad = zeros(nt,5); % stores the exhaustion state of synapses of a given neuron
     i=1;
     qq = 1; % to index the HDTS
     qq_post = 1; % to index the compressed version of the HTDS
+    qq_post2 = 1;
     losses = zeros(nt, 1);
    
     %% SIMULATION
@@ -306,17 +327,28 @@ The function can be called in two ways:
         if high_dimensional_temporal_signal == 1
             if training_setting == 5
                 % HDTS, compress
-                %I = I + E2*hdts(:,qq)*(i < icrit_2) + E2*hdts_post(:,qq_post)*(i >= icrit_2);
-            
+                %I = I + E2 * hdts(:,qq) * (i < icrit_2) + E2 * hdts_post(:,qq_post) * (i >= icrit_2);
+                %{ 
+                I = I + E2 * hdts(:,qq) * (i < icrit_2) ...
+                      + E2 * hdts_post(:,qq_post) * (i >= icrit_2 && i < icrit_2 + 2*round(target_length/dt)) ...
+                      + E2 * hdts_post2(:,qq_post2) * (i >= icrit_2 + 2*round(target_length/dt));
+                %}
+                
                 % HDTS, trigger replay
-                I = I + E2*hdts(:,qq)*(i < icrit_2 || i > icrit_2 + 2*round(target_length/dt));
+                %I = I + E2*hdts(:,qq)*(i < icrit_2 || i > icrit_2 + 2*round(target_length/dt));
+                I = I + E2*hdts(:,qq)*(i < icrit || i > icrit_2);
                 %if i >= round(6000/dt) && i <= round(8000/dt)  BIAS = 0; else BIAS = 1000; end
             end
-            if training_setting == 6
+            if training_setting == 6 || training_setting == 8
                 % HDTS, change activity
                 I = I + E2*hdts_train(:,i);
                 %if i >= round(5000/dt) && i <= round(7000/dt)   BIAS = 0; else BIAS = 1000; end
                 %if i >= round(10000/dt) && i <= round(12000/dt)   BIAS = 0; else BIAS = 1000; end
+            end
+            
+            if training_setting == 7
+                % just HDTS to aid learning
+                I = I + E2*hdts(:,qq);
             end
         end
         
@@ -344,7 +376,7 @@ The function can be called in two ways:
                 JD = sum(OMEGA(:,index),2); % compute the increase in current due to spiking  
             end
               
-            tspike(ns+1:ns+length(index),:) = [index,0*index + dt*i];  %  store spike times. Takes longer.
+            %tspike(ns+1:ns+length(index),:) = [index,0*index + dt*i];  %  store spike times. Takes longer.
             ns = ns + ns_t; 
         end
         %% exponential filters
@@ -372,9 +404,10 @@ The function can be called in two ways:
 
         if qq      >= dims_zx(2)         qq = 1;      end
         if qq_post >= dims_hdts_post(2)  qq_post = 1; end
+        if qq_post2 >= dims_hdts_post2(2)  qq_post2 = 1; end
         
         err = z - zx(:, qq);
-        qq = qq + 1;    qq_post = qq_post + 1;
+        qq = qq + 1;    qq_post = qq_post + 1; qq_post2 = qq_post2 + 1;
         
         %% RLS 
         % apply RLS only every 'step' steps, i.e every dt*step milliseconds
@@ -394,7 +427,7 @@ The function can be called in two ways:
         v_ = v;  % sets v(t-1) = v for the next iteration of loop
         
         REC(i,:) = [v(1:5)',u(1:5)'];  
-        current(i,:) = z';
+        current(:,i) = z;
         RECB(i,:) = BPhi(1:5);
         RECy_ad(i,:) = y_ad(1:5)'; 
         
@@ -406,11 +439,11 @@ The function can be called in two ways:
             
             %% uncomment this for target reconstruction
             [argvalue, index_max] = max(z);
-            reconstructed_zx(:,i) = bin_centers(index_max);
+            %reconstructed_zx(:,i) = bin_centers(index_max);
             %reconstructed_zx(:,i) = z' * bin_centers;
         else
-            % sum of squared errors
-            losses(i) = sum(err.^2);
+            % mean squared error
+            losses(i) = mean(err.^2);
         end
         
         %% control frequency
@@ -440,16 +473,26 @@ The function can be called in two ways:
         
     end
     fprintf("Simulation finished\n");
+    %% smooth output
+    tau_smooth = 1/dt;
+    
+    for j=1:k
+        current(j,:) = filter_output(current(j,:), dt, tau_smooth);
+    end
     
     %% filtering the reconstructed target
     tau_rec = 10/dt; % low-pass filter time constant
     if n_slices > 0
         %reconstructed_zx = filter_output(reconstructed_zx, dt, tau_rec);
-        losses = (reconstructed_zx - original_zx).^2;
+        %losses = (reconstructed_zx - original_zx).^2;
     end
     %% Save weights
-    save('weights.mat', 'OMEGA', 'BPhi', 'E');
-
+    save('weights.mat', 'OMEGA', 'BPhi', 'E', 'E2');
+    
+    save('Data/forNRP/parameters.mat', 'N', 'a', 'b', 'vreset', 'd', 'C', 'vr', 'ff', ...
+                'vpeak', 'vt', 'p', 'G', 'Q', 'WE2', 'BIAS');
+    save('Data/forNRP/weights.mat', 'OMEGA', 'BPhi', 'E', 'E2', 'N', 'k', 'm');
+    
     %% Average Firing Rate and Average Error after training
     % only consider the spikes from the moment RLS is turned off till the end of the simulation.
     % multiply by 1000 to convert milliseconds to seconds.
@@ -481,17 +524,20 @@ The function can be called in two ways:
         if k == 1
             plot_approximant_vs_target(zx, current, dt, nt, imin, icrit, icrit_2);
             plot_approximant(current, dt, nt, imin, icrit, icrit_2)
+        else
+            % plots joint trajectories
+            plot_multidim_approx_vs_target(zx, current, dt, nt, imin, icrit, icrit_2, target_length)
         end
             
         %plot_loss(losses, dt, nt, imin, icrit);
-        plot_raster(tspike, ns, dt, nt, imin, icrit);
+        %plot_raster(tspike, ns, dt, nt, imin, icrit);
         %plot_general_network_activity(y, dt, nt);
         %plot_target_vs_reconstruction(original_zx, reconstructed_zx, dt, nt, imin, icrit);
         %plot_membrane_pre_and_post_learning(REC, dt, nt, vpeak, vreset, imin, icrit);
         %plot_eigenvalues_pre_and_post_learning(OMEGA, E, BPhi);
         %plot_decoders(RECB, dt, nt);
         %plot_phase_portait_pre_and_post_training(REC, dt, imin, icrit, nt);
-        plot_spectrogram(current, dt)
+        %plot_spectrogram(current, dt)
         
         %{
         figure;

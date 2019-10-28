@@ -1,0 +1,96 @@
+\select@language {english}
+\contentsline {chapter}{\numberline {1}Background}{3}{chapter.1}
+\contentsline {section}{\numberline {1.1}Introduction}{3}{section.1.1}
+\contentsline {paragraph}{Human-robot collaboration}{3}{section*.3}
+\contentsline {paragraph}{Project objectives}{3}{section*.4}
+\contentsline {paragraph}{Possible real-world applications}{4}{section*.5}
+\contentsline {paragraph}{Thesis outline}{4}{section*.6}
+\contentsline {section}{\numberline {1.2}Robotics Foundamentals}{4}{section.1.2}
+\contentsline {section}{\numberline {1.3}The Izhikevich model}{4}{section.1.3}
+\contentsline {section}{\numberline {1.4}The FORCE method}{6}{section.1.4}
+\contentsline {paragraph}{Network architecture}{6}{section*.13}
+\contentsline {paragraph}{Network weights}{7}{section*.15}
+\contentsline {paragraph}{Network output}{7}{section*.16}
+\contentsline {paragraph}{Recursive Least Squares update}{8}{section*.17}
+\contentsline {paragraph}{Injected Current}{8}{section*.18}
+\contentsline {paragraph}{Feedback}{9}{section*.21}
+\contentsline {paragraph}{Error reduction}{9}{section*.22}
+\contentsline {paragraph}{Weights initialization}{9}{section*.23}
+\contentsline {section}{\numberline {1.5}Related Work}{9}{section.1.5}
+\contentsline {subsection}{\numberline {1.5.1}FORCE training to learn multiple signals}{9}{subsection.1.5.1}
+\contentsline {paragraph}{4-bit memory}{9}{section*.24}
+\contentsline {paragraph}{Motion capture}{10}{section*.25}
+\contentsline {subsection}{\numberline {1.5.2}High-dimensional temporal signals improve FORCE learning}{10}{subsection.1.5.2}
+\contentsline {paragraph}{Learn a song fragment}{11}{section*.27}
+\contentsline {paragraph}{Learn a movie scene}{11}{section*.28}
+\contentsline {paragraph}{Frequency and amplitude of HDTS}{11}{section*.29}
+\contentsline {paragraph}{Accelerated and reverse replay}{11}{section*.30}
+\contentsline {subsection}{\numberline {1.5.3}Robot control via artificial neural networks}{12}{subsection.1.5.3}
+\contentsline {paragraph}{I.}{12}{section*.34}
+\contentsline {paragraph}{II.}{13}{section*.36}
+\contentsline {paragraph}{III.}{13}{section*.37}
+\contentsline {chapter}{\numberline {2}Methods}{16}{chapter.2}
+\contentsline {section}{\numberline {2.1}Datasets description}{16}{section.2.1}
+\contentsline {subsection}{\numberline {2.1.1}Synthetic datasets}{16}{subsection.2.1.1}
+\contentsline {subsection}{\numberline {2.1.2}Trajectories datasets}{17}{subsection.2.1.2}
+\contentsline {paragraph}{Dataset usage}{19}{section*.42}
+\contentsline {section}{\numberline {2.2}Settling the network in an oscillatory regime prior to training}{20}{section.2.2}
+\contentsline {subsection}{\numberline {2.2.1}Injection of an inhibitory current}{20}{subsection.2.2.1}
+\contentsline {paragraph}{General network activity}{20}{section*.43}
+\contentsline {paragraph}{Inhibitory term}{21}{section*.44}
+\contentsline {paragraph}{High-gain network}{21}{section*.45}
+\contentsline {subsection}{\numberline {2.2.2}External sinusoidal wave}{21}{subsection.2.2.2}
+\contentsline {subsection}{\numberline {2.2.3}Short-term depression}{21}{subsection.2.2.3}
+\contentsline {section}{\numberline {2.3}High-dimensional temporal signals}{21}{section.2.3}
+\contentsline {paragraph}{HDTS construction}{21}{section*.50}
+\contentsline {paragraph}{HDTS usage}{22}{section*.52}
+\contentsline {paragraph}{HDTS pulses}{22}{section*.53}
+\contentsline {paragraph}{HTDS for accelerated replay}{23}{section*.55}
+\contentsline {paragraph}{HTDS for inverse replay}{23}{section*.57}
+\contentsline {paragraph}{HDTS for the interpolation/extrapolation of multiple signals}{24}{section*.58}
+\contentsline {chapter}{\numberline {3}Results}{25}{chapter.3}
+\contentsline {section}{\numberline {3.1}Pre-training}{25}{section.3.1}
+\contentsline {paragraph}{Discussion}{25}{section*.59}
+\contentsline {section}{\numberline {3.2}Training}{27}{section.3.2}
+\contentsline {subsection}{\numberline {3.2.1}Changing the phase $\varphi _{sin}$ of the teaching signal}{27}{subsection.3.2.1}
+\contentsline {paragraph}{Discussion}{28}{section*.62}
+\contentsline {subsection}{\numberline {3.2.2}"Computing derivatives"}{28}{subsection.3.2.2}
+\contentsline {subsection}{\numberline {3.2.3}Discretization of the target signal}{30}{subsection.3.2.3}
+\contentsline {paragraph}{One-hot input, continuous m-dimensional output (WRONG)}{30}{section*.65}
+\contentsline {paragraph}{One-hot input, one hot target, multi-class misclassification error}{31}{section*.67}
+\contentsline {paragraph}{One-hot input, maxout target}{31}{section*.69}
+\contentsline {paragraph}{One-hot + smoothing input, maxout target}{32}{section*.71}
+\contentsline {paragraph}{One-hot + smoothing input, maxout target, selective feedback}{33}{section*.74}
+\contentsline {section}{\numberline {3.3}Control the replay velocity changing the spike frequency adaption}{34}{section.3.3}
+\contentsline {section}{\numberline {3.4}Using high-dimensional temporal signals}{37}{section.3.4}
+\contentsline {subsection}{\numberline {3.4.1}HDTS speeds up the replay}{37}{subsection.3.4.1}
+\contentsline {subsection}{\numberline {3.4.2}Inverse replay}{38}{subsection.3.4.2}
+\contentsline {subsection}{\numberline {3.4.3}HDTS triggers the replay}{39}{subsection.3.4.3}
+\contentsline {subsection}{\numberline {3.4.4}Multiple HDTS to learn multiple signals}{39}{subsection.3.4.4}
+\contentsline {subsection}{\numberline {3.4.5}Signal interpolation and extrapolation}{41}{subsection.3.4.5}
+\contentsline {section}{\numberline {3.5}Learning joint trajectories}{43}{section.3.5}
+\contentsline {subsection}{\numberline {3.5.1}HDTS helps the training}{43}{subsection.3.5.1}
+\contentsline {subsection}{\numberline {3.5.2}HDTS accelerate and decelerate replay}{45}{subsection.3.5.2}
+\contentsline {subsection}{\numberline {3.5.3}HDTS triggers the replay}{46}{subsection.3.5.3}
+\contentsline {subsection}{\numberline {3.5.4}Learn four trajectories}{47}{subsection.3.5.4}
+\contentsline {subsection}{\numberline {3.5.5}Trajectory interpolation}{48}{subsection.3.5.5}
+\contentsline {section}{\numberline {3.6}Experimental procedures}{50}{section.3.6}
+\contentsline {paragraph}{For \autoref {fig:error_and_firing_rate_vs_d}}{50}{section*.106}
+\contentsline {paragraph}{For \autoref {fig:change_d_control_frequency}}{50}{section*.107}
+\contentsline {paragraph}{For \autoref {fig:change_a_control_frequency}}{50}{section*.108}
+\contentsline {subsection}{\numberline {3.6.1}HDTS with synthetic datasets}{50}{subsection.3.6.1}
+\contentsline {paragraph}{For \autoref {fig:HDTS_speedup_replay}}{51}{section*.110}
+\contentsline {paragraph}{For \autoref {fig:HDTS_inverse}}{51}{section*.112}
+\contentsline {paragraph}{For \autoref {fig:HDTS_triggers}}{51}{section*.113}
+\contentsline {paragraph}{For \autoref {fig:multi_HDTS_multi_target}}{51}{section*.114}
+\contentsline {paragraph}{For \autoref {fig:one_HDTS_two_targets}}{51}{section*.115}
+\contentsline {paragraph}{For \autoref {fig:HDTS_interpolation_extrapolation}}{51}{section*.116}
+\contentsline {paragraph}{For \autoref {fig:HDTS_interpolation_three_signals}}{51}{section*.117}
+\contentsline {subsection}{\numberline {3.6.2}HDTS with trajectory datasets}{51}{subsection.3.6.2}
+\contentsline {paragraph}{For \autoref {fig:learn_traj_no_hdts}}{51}{section*.118}
+\contentsline {paragraph}{For \autoref {fig:learn_traj_hdts}}{51}{section*.119}
+\contentsline {paragraph}{For \autoref {fig:learn_traj_trigger_replay}}{51}{section*.120}
+\contentsline {paragraph}{For \autoref {fig:learn_four_traj}}{51}{section*.121}
+\contentsline {paragraph}{For \autoref {fig:interpolate_trajectories}}{51}{section*.122}
+\contentsline {chapter}{\numberline {4}Discussion}{52}{chapter.4}
+\contentsline {chapter}{\numberline {5}Conclusions}{53}{chapter.5}

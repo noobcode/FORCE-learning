@@ -69,7 +69,7 @@ function zx_train = two_target(target_length_1, target_length_2, dt)
     zx_13 = 0.5*zx1 + 0.5*zx3;
     zx_23 = 0.5*zx2 + 0.5*zx3;
     zx_123 = 0.34*zx1 + 0.33*zx2 + 0.33*zx3;
-    zx_1234 = 0.25*zx1 + 0.25*zx3 + 0.25*zx4;
+    zx_1234 = 0.25*zx1 + 0.25*zx2 + 0.25*zx3 + 0.25*zx4;
     
     % pre-training
     zx_train = zeros(1, imin);

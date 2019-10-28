@@ -1,0 +1,25 @@
+\begin{thebibliography}{1}
+
+\bibitem{asabuki2018interactive}
+Toshitake Asabuki, Naoki Hiratani, and Tomoki Fukai.
+\newblock Interactive reservoir computing for chunking information streams.
+\newblock {\em PLoS computational biology}, 14(10):e1006400, 2018.
+
+\bibitem{goudar2018encoding}
+Vishwa Goudar and Dean~V Buonomano.
+\newblock Encoding sensory and motor patterns as time-invariant trajectories in
+  recurrent neural networks.
+\newblock {\em Elife}, 7:e31134, 2018.
+
+\bibitem{hoerzer2012emergence}
+Gregor~M Hoerzer, Robert Legenstein, and Wolfgang Maass.
+\newblock Emergence of complex computational structures from chaotic neural
+  networks through reward-modulated hebbian learning.
+\newblock {\em Cerebral cortex}, 24(3):677--690, 2012.
+
+\bibitem{nicola2017supervised}
+Wilten Nicola and Claudia Clopath.
+\newblock Supervised learning in spiking neural networks with force training.
+\newblock {\em Nature communications}, 8(1):2208, 2017.
+
+\end{thebibliography}

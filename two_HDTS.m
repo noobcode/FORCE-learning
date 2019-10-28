@@ -132,6 +132,10 @@ function hdts_train = two_HDTS(m, length_signal_1, length_signal_2, dt)
     plot(tt1, hdts);
     figure;
     plot(tt2, hdts2);
+    figure;
+    plot(tt2, hdts3);
+    figure;
+    plot(tt2, hdts4);
     
     figure;
     dims = size(hdts_train);

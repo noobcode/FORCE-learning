@@ -1,4 +1,4 @@
-function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iteration_per_target_cycle, target_length)
+function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, iteration_per_target_cycle, target_lengths)
     %% define simulation intervals
     % [0, imin] -- time before starting RLS, gets the network to chaotic attractor
     % (imin, icrit) -- training interval
@@ -46,17 +46,35 @@ function [imin, icrit, icrit_2, nt] = set_simulation_time(training_setting, dt, 
         nt = icrit_2 + round(120000/dt);
     elseif training_setting == 5
         %% Using HDTS
-        imin = round(target_length/dt); % start training at beginning of signal
-        icrit = imin + 3*imin; % train for X repetitions of the target signal
-        icrit_2 = icrit + 2*imin; % repeat signal Y times after training
-        nt = icrit_2 + 4*imin; % repeat signal after post control
+        imin = round(target_lengths(1)/dt); % start training at beginning of signal
+        icrit = imin + 2*imin; % train for X repetitions of the target signal
+        icrit_2 = icrit + 1*imin; % repeat signal Y times after training
+        nt = icrit_2 + 2*imin; % repeat signal after post control
     elseif training_setting == 6
         %% HDTS train with 2 targets
-        imin = round(1000/dt);
-        icrit = imin + 6*round(target_length/dt); % 3/4
-        icrit_2 = icrit + 3*round(target_length/dt); %-1;
-        %nt = icrit + round(4000/dt) + 6*round(target_length/dt); % 4/2000, 6/3*
-        nt = icrit + round(15000/dt); % for inverse replay 3; for two HDTS one target 4;
+        imin = round(target_lengths(1)/dt);
+        icrit = imin + 24*round(target_lengths(1)/dt); % 3/4
+        icrit_2 = icrit + 1*round(target_lengths(1)/dt); %-1;
+        nt = icrit_2 + 3*round(target_lengths(1)/dt);
+        %nt = icrit + round(4000/dt) + 6*round(target_lengths(1)/dt); % 4/2000, 6/3*
+        %nt = icrit + round(15000/dt); % for inverse replay 3; for two HDTS one target 4;
+    elseif training_setting == 7
+        %% learning trajectories, standard
+        imin = round(target_lengths(1)/dt); % start training at beginning of signal
+        icrit = imin + 2*imin; % train for X repetitions of the target signal
+        icrit_2 = -1;
+        nt = icrit + 2*imin; % repeat signal after post training
+    elseif training_setting == 8
+        %% learn 4 trajectories
+        T1 = round(target_lengths(1)/dt);
+        T2 = round(target_lengths(2)/dt);
+        T3 = round(target_lengths(3)/dt);
+        T4 = round(target_lengths(4)/dt);
+        
+        imin = T1;
+        icrit = imin + 3*(T1 + T2 + T3 + T4);
+        icrit_2 = icrit + T1;
+        nt = icrit_2 + 2*(T1 + T2 + T3 + T4);
     end 
     
     fprintf("training_setting: %d\n", training_setting);

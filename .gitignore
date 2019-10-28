@@ -1,6 +1,9 @@
 *.~
 weights.mat
 Images/
-Report/
+Data/forNRP/
+Data/syntheticData/
+
 *.m~
 IZFORCESINE_mod2.m
+
